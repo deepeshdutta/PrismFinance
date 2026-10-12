@@ -1,28 +1,13 @@
 # PrismFinance
 
-Personal Wealth & Investment Intelligence Platform
+Static site for GitHub Pages. Balances live in Supabase. Each signed-in person only sees their own rows.
 
-**Mobile-first**, multi-user (starting with 5), privacy-centric net worth tracker with focused dashboards and charts.
+Live URL, after the Pages workflow finishes: https://deepeshdutta.github.io/PrismFinance/
 
-## Vision
-Centralized view of assets, liabilities, cash flow, and portfolio performance. Clean UI prioritizing key metrics and graphs over clutter.
+## One-time Supabase step
 
-## Stack
-- Frontend: Vite + React + Tailwind CSS + Recharts
-- Auth & Database: Supabase (to be provisioned)
-- Hosting: Cloudflare Pages (`prismfinance.pages.dev`)
+In the Supabase SQL editor, run [supabase/policies.sql](supabase/policies.sql).
 
-## Local Development
-```bash
-npm install
-npm run dev
-```
+Also turn on Email sign-in (Authentication → Providers → Email). If “Confirm email” is on, new people must open the confirmation mail before they can sign in.
 
-## Deployment
-Connect this repo to Cloudflare Pages. Build command: `npm run build`, output: `dist`.
-
-## Next Steps
-1. Create Supabase project and add env vars.
-2. Implement auth (email OTP / Cloudflare Access compatible).
-3. Build schema for accounts, transactions, holdings, liabilities.
-4. Develop dashboard cards and charts.
+The publishable key is public. The secret key is not in this repo.

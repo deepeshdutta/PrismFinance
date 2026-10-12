@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --color-paper: #f3efe6;
+  --color-card: #fbf8f3;
+  --color-ink: #1c1915;
+  --color-muted: #6d665c;
+  --color-line: #e4dcd0;
+  --color-pine: #1b6b48;
+  --color-pine-soft: #e4f2ea;
+  --color-clay: #9c4630;
+  --color-clay-soft: #f8ebe6;
+  --radius-card: 1.25rem;
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    min-height: 100%;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  input,
+  select {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: var(--color-pine);
+    padding-inline: 1rem;
+    font-size: 0.875rem;
+    font-weight: 560;
+    color: var(--color-card);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+  }
+  .btn-ghost {
+    display: inline-flex;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    background: var(--color-card);
+    padding-inline: 1rem;
+    font-size: 0.875rem;
+    font-weight: 560;
+    color: var(--color-ink);
+  }
+  .field {
+    height: 2.75rem;
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-line);
+    background: var(--color-card);
+    padding-inline: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+    outline: none;
+  }
+  .field:focus {
+    border-color: var(--color-pine);
+  }
+}
