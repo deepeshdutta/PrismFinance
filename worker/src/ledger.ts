@@ -10,7 +10,8 @@ interface Ctx { database: string; key: string; ownerId: string; role: 'owner' | 
 async function db(ctx: Ctx, path: string, init: RequestInit = {}, query: Record<string, string> = {}) {
   const url = new URL(`${ctx.database}/rest/v1/${path}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
-  const res = await ctx.fetcher(url, {
+  const send = ctx.fetcher; // call detached: Workers throw "Illegal invocation" if fetch is invoked as a method
+  const res = await send(url, {
     ...init,
     headers: { apikey: ctx.key, 'Content-Type': 'application/json', Prefer: 'return=representation', ...(init.headers ?? {}) },
     signal: AbortSignal.timeout(5000),
