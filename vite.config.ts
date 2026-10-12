@@ -4,6 +4,6 @@ import tailwindcss from "@tailwindcss/vite";
 
 // Project site: https://deepeshdutta.github.io/PrismFinance/
 export default defineConfig({
-  base: "/PrismFinance/",
+  base: process.env.VITE_BASE ?? "/",
   plugins: [react(), tailwindcss()],
 });
