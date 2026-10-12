@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prismfinance",
+  "main": "worker/src/site.ts",
+  "compatibility_date": "2026-10-06",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "https://frosty-night-150d.cloudflareaccess.com",
+    "ACCESS_AUD": "71e4e20c6b3a9ed4b1ece9bf2e510bd0fb1a328b4abd5c5e8b81344141f8a48b",
+    "SUPABASE_URL": "https://gsvfzjuktwowliycqvpw.supabase.co"
+  }
+}
