@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 import { AllocationChart, TrendChart } from "./charts";
 import {
@@ -143,7 +143,7 @@ function Welcome() {
       <p className="mt-4 max-w-md text-sm text-muted">
         Each person signs in and sees only their own numbers. Built for about five people.
       </p>
-      <Link to="/login" className="btn mt-6">
+      <Link to="/books" className="btn mt-6">
         Open your books
       </Link>
     </section>
@@ -537,77 +537,112 @@ function TxnForm({
   );
 }
 
-function Login() {
+function Login({ next = "/books" }: { next?: string }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  async function onSubmit(event: FormEvent) {
+
+  async function sendCode(event: FormEvent) {
     event.preventDefault();
     setPending(true);
     setError(null);
-    setNote(null);
-    const result =
-      mode === "up"
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
+    const { error: sendError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: "https://deepeshdutta.github.io/PrismFinance/books",
+      },
+    });
     setPending(false);
-    if (result.error) {
-      setError(result.error.message);
+    if (sendError) {
+      setError(sendError.message);
       return;
     }
-    if (mode === "up" && !result.data.session) {
-      setNote("Check your email to confirm the account, then sign in.");
-      setMode("in");
-      return;
-    }
-    await navigate("/");
+    setSent(true);
   }
+
+  async function confirmCode(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token: code.trim(),
+      type: "email",
+    });
+    setPending(false);
+    if (verifyError) {
+      setError(verifyError.message);
+      return;
+    }
+    await navigate(next);
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-10">
-      <Link to="/" className="font-display text-3xl tracking-tight">
-        PrismFinance
-      </Link>
-      <p className="mt-2 text-sm text-muted">Each person gets their own books. Nothing is shared.</p>
-      <form onSubmit={onSubmit} className="mt-8 space-y-3">
-        <input className="field" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input className="field" type="password" placeholder="Password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
-        {error ? <p className="text-sm text-clay">{error}</p> : null}
-        {note ? <p className="text-sm text-muted">{note}</p> : null}
-        <button className="btn w-full" type="submit" disabled={pending}>
-          {pending ? "Working…" : mode === "up" ? "Create account" : "Sign in"}
-        </button>
-        <button
-          type="button"
-          className="text-sm text-muted"
-          onClick={() => {
-            setMode(mode === "up" ? "in" : "up");
-            setError(null);
-          }}
-        >
-          {mode === "up" ? "Already have an account? Sign in" : "New here? Create an account"}
-        </button>
-      </form>
-    </main>
+    <section className="mx-auto w-full max-w-md pt-4">
+      <p className="text-xs tracking-wide text-muted uppercase">One-time code</p>
+      <h1 className="mt-2 font-display text-3xl tracking-tight">Confirm your email</h1>
+      <p className="mt-2 text-sm text-muted">No password. We’ll email a one-time code. Enter it here to open your books.</p>
+      {sent ? (
+        <form onSubmit={confirmCode} className="mt-6 space-y-3">
+          <input className="field" type="email" value={email} readOnly />
+          <input
+            className="field"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="Code from the email"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+          />
+          {error ? <p className="text-sm text-clay">{error}</p> : null}
+          <button className="btn w-full" type="submit" disabled={pending}>
+            {pending ? "Checking…" : "Confirm code"}
+          </button>
+          <button type="button" className="text-sm text-muted" onClick={() => setSent(false)}>
+            Use a different email
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={sendCode} className="mt-6 space-y-3">
+          <input
+            className="field"
+            type="email"
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          {error ? <p className="text-sm text-clay">{error}</p> : null}
+          <button className="btn w-full" type="submit" disabled={pending}>
+            {pending ? "Sending…" : "Email me a code"}
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 
 export default function App() {
   const { user, ready } = useSession();
+  const location = useLocation();
   const books = useBooks(Boolean(user));
   const [editing, setEditing] = useState<AccountRow | null>(null);
+  const needsCode = !user && (location.pathname === "/books" || location.pathname === "/login");
   if (!ready) return <p className="p-6 text-sm text-muted">Loading…</p>;
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
       <Route
         path="*"
         element={
           <Shell user={user}>
-            {!user ? (
+            {needsCode ? (
+              <Login next="/books" />
+            ) : !user ? (
               <Welcome />
             ) : (
               <Routes>
