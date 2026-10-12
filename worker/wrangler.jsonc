@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prismfinance-access-foundation",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    "SUPABASE_URL": "https://gsvfzjuktwowliycqvpw.supabase.co"
+  }
+}
