@@ -82,6 +82,67 @@ export async function route(request: Request, ctx: Ctx): Promise<unknown> {
       return { account: rows[0] };
     }
   }
-  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me'].includes(resource ?? '') ? 405 : 404,
-    parts.length >= 2 && ['accounts', 'summary'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
+  if (resource === 'transactions') {
+    if (parts.length === 2 && m === 'GET') {
+      const q: Record<string, string> = { select: 'id,account_id,posted_on,description,amount,category', ...owned(ctx), order: 'posted_on.desc,created_at.desc', limit: '500' };
+      const lim = Number(url.searchParams.get('limit')); if (Number.isInteger(lim) && lim > 0 && lim <= 500) q.limit = String(lim);
+      return { transactions: await db(ctx, 'pf_transactions', {}, q) };
+    }
+    if (parts.length === 2 && m === 'POST') {
+      requireWriter(ctx);
+      const b = await body(request);
+      const accountId = text(b.account_id, 36)!;
+      if (!UUID.test(accountId)) throw new HttpError(400, 'invalid_body');
+      const date = text(b.posted_on, 10)!;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) throw new HttpError(400, 'invalid_body');
+      const amount = money(b.amount);
+      if (amount === 0) throw new HttpError(400, 'invalid_body');
+      const row = { owner_id: ctx.ownerId, account_id: accountId, posted_on: date, description: text(b.description, 200), amount, category: text(b.category, 60, false) };
+      const mine = await db(ctx, 'pf_accounts', {}, { select: 'id', id: `eq.${accountId}`, ...owned(ctx), limit: '1' });
+      if (!mine.length) throw new HttpError(404, 'not_found');
+      const [created] = await db(ctx, 'pf_transactions', { method: 'POST', body: JSON.stringify(row) });
+      return { transaction: created };
+    }
+    if (parts.length === 3 && id && UUID.test(id) && m === 'DELETE') {
+      requireWriter(ctx);
+      await db(ctx, 'pf_transactions', { method: 'DELETE' }, { id: `eq.${id}`, ...owned(ctx) });
+      return { ok: true };
+    }
+  }
+  if (resource === 'cashflow' && parts.length === 2) {
+    if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
+    return cashflow(ctx, url);
+  }
+  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow'].includes(resource ?? '') ? 405 : 404,
+    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
+}
+
+export const TRANSFER = 'transfer';
+async function cashflow(ctx: Ctx, url: URL) {
+  const months = Math.min(Math.max(Number(url.searchParams.get('months')) || 6, 1), 24);
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
+  const rows = await db(ctx, 'pf_transactions', {}, { select: 'posted_on,amount,category', ...owned(ctx), posted_on: `gte.${start.toISOString().slice(0, 10)}`, limit: '10000' });
+  const keys: string[] = [];
+  for (let i = 0; i < months; i++) keys.push(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1)).toISOString().slice(0, 7));
+  const by: Record<string, { income: number; expenses: number }> = Object.fromEntries(keys.map((k) => [k, { income: 0, expenses: 0 }]));
+  const daily: Record<string, number> = {};
+  const cats: Record<string, number> = {};
+  const last = keys[keys.length - 1];
+  for (const t of rows) {
+    if (String(t.category ?? '').toLowerCase() === TRANSFER) continue; // transfers are neither income nor expense
+    const k = String(t.posted_on).slice(0, 7); const a = Number(t.amount);
+    if (!by[k]) continue;
+    if (a > 0) by[k].income += a; else {
+      by[k].expenses += -a;
+      if (k === last) { daily[t.posted_on] = (daily[t.posted_on] ?? 0) + -a; const c = t.category || 'Uncategorized'; cats[c] = (cats[c] ?? 0) + -a; }
+    }
+  }
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return {
+    months: keys.map((k) => ({ month: k, income: r(by[k].income), expenses: r(by[k].expenses), net: r(by[k].income - by[k].expenses) })),
+    currentMonth: last,
+    daily: Object.fromEntries(Object.entries(daily).map(([d, v]) => [d, r(v)])),
+    categories: Object.entries(cats).map(([category, amount]) => ({ category, amount: r(amount) })).sort((a, b) => b.amount - a.amount),
+  };
 }

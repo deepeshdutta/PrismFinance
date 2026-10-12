@@ -77,3 +77,28 @@ test('fetch is never invoked with the context object as `this` (Workers: Illegal
   };
   await route(req('GET', '/api/accounts'), c);
 });
+
+const mk = (rows: any[], calls: URL[] = []) => ({ database: 'https://x.supabase.co', key: 'k', ownerId: A, role: 'owner' as const,
+  fetcher: (async (u: URL, init: RequestInit = {}) => { calls.push(u); return new Response(JSON.stringify(u.pathname.endsWith('pf_accounts') ? [{ id: 'x' }] : init.method === 'POST' ? [{ id: 't' }] : rows), { status: 200 }); }) as any });
+test('cash flow excludes transfers and splits income/expenses by month', async () => {
+  const d = new Date(); const ym = d.toISOString().slice(0, 7);
+  const out: any = await route(req('GET', '/api/cashflow?months=3'), mk([
+    { posted_on: ym + '-02', amount: '5000', category: 'Income' }, { posted_on: ym + '-03', amount: '-100.5', category: 'Groceries' },
+    { posted_on: ym + '-03', amount: '-20', category: 'Dining' }, { posted_on: ym + '-04', amount: '-2000', category: 'Transfer' }, { posted_on: ym + '-04', amount: '2000', category: 'Transfer' }]));
+  assert.equal(out.months.length, 3);
+  assert.deepEqual(out.months.at(-1), { month: ym, income: 5000, expenses: 120.5, net: 4879.5 });
+  assert.equal(out.daily[ym + '-03'], 120.5);
+  assert.equal(out.categories[0].category, 'Groceries');
+});
+test('transactions are owner-scoped, validated, and need an owned account', async () => {
+  const calls: URL[] = [];
+  await route(req('GET', '/api/transactions'), mk([], calls));
+  assert.equal(calls[0].searchParams.get('owner_id'), `eq.${A}`);
+  const ok = { account_id: B, posted_on: '2026-10-01', description: 'Coffee', amount: -4.5 };
+  await route(req('POST', '/api/transactions', ok), mk([], calls));
+  for (const bad of [{ ...ok, amount: 0 }, { ...ok, posted_on: '10/01/2026' }, { ...ok, account_id: 'nope' }, { ...ok, description: '' }])
+    await assert.rejects(route(req('POST', '/api/transactions', bad), mk([])), (e: any) => e.status === 400);
+  await assert.rejects(route(req('POST', '/api/transactions', ok), { ...mk([]), role: 'viewer' as const }), (e: any) => e.status === 403);
+  const none = { ...mk([]), fetcher: (async () => new Response('[]', { status: 200 })) as any };
+  await assert.rejects(route(req('POST', '/api/transactions', ok), none), (e: any) => e.status === 404);
+});
