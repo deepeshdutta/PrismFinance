@@ -76,14 +76,90 @@
       accounts = a.accounts; summary = s; error = null;
     } catch (e) { error = e.message; }
     paint();
+    await loadMore();
     const stamp = document.querySelector('.who span'); if (stamp && !error) stamp.textContent = 'Updated ' + new Date().toLocaleString();
   }
+
+
+  // ---------- Banking (transactions) and Cash Flow ----------
+  let txns = [], flow = null, flowErr = null, txErr = null;
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const mlabel = (k) => MON[Number(k.slice(5, 7)) - 1] + ' ' + k.slice(2, 4);
+  const acctName = (id) => (accounts.find((a) => a.id === id) || {}).name || 'Unknown';
+  const today = () => new Date().toISOString().slice(0, 10);
+  function txForm() {
+    if (!canWrite) return '';
+    if (!accounts.length) return '<div class="card" style="margin-bottom:14px"><p class="sub">Add an account first, then you can record transactions.</p><a class="btn" href="#accounts">Go to Accounts</a></div>';
+    return `<form id="addTx" class="card" style="margin-bottom:14px"><h3>Add a transaction</h3>
+      <div class="hint">Money out is negative (e.g. -42.10). Use the category "Transfer" for moves between your own accounts so they are not counted as income or spending.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px">
+        <div><label class="sub" for="tDate">Date</label><input id="tDate" type="date" required value="${today()}"></div>
+        <div><label class="sub" for="tAcct">Account</label><select id="tAcct">${accounts.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></div>
+        <div><label class="sub" for="tDesc">Description</label><input id="tDesc" maxlength="200" required placeholder="Market Basket"></div>
+        <div><label class="sub" for="tCat">Category</label><input id="tCat" maxlength="60" placeholder="Groceries"></div>
+        <div><label class="sub" for="tAmt">Amount (USD)</label><input id="tAmt" type="number" step="0.01" required placeholder="-42.10"></div>
+      </div><button class="btn" type="submit" style="margin-top:12px">Add transaction</button><span class="sub" id="tMsg" role="status" style="margin-left:10px"></span></form>`;
+  }
+  function txTable() {
+    if (!txns.length) return '<div class="card"><h3>No transactions yet</h3><p class="sub">Transactions you add appear here. Only you can see them.</p></div>';
+    return `<div class="card"><h3>Recent transactions</h3><div class="hint">Transfers are excluded from income and expenses</div><div style="overflow-x:auto"><table>
+      <tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="r">Amount</th>${canWrite ? '<th></th>' : ''}</tr>
+      ${txns.map((t) => `<tr><td>${esc(t.posted_on)}</td><td>${esc(t.description)}</td><td>${esc(t.category || '—')}</td><td>${esc(acctName(t.account_id))}</td><td class="r num ${Number(t.amount) < 0 ? 'down' : 'up'}">${usd(Number(t.amount), 2)}</td>${canWrite ? `<td class="r"><button class="chip sm" data-deltx="${esc(t.id)}">Delete</button></td>` : ''}</tr>`).join('')}</table></div></div>`;
+  }
+  function bankingHtml() {
+    if (txErr) return `<div class="card"><h3>Couldn't load transactions</h3><p class="sub">${esc(txErr)}</p><button class="btn" data-retry>Try again</button></div>`;
+    if (!me) return '<div class="card"><p class="sub">Loading…</p></div>';
+    return txForm() + txTable();
+  }
+  function cashflowHtml() {
+    if (flowErr) return `<div class="card"><h3>Couldn't load cash flow</h3><p class="sub">${esc(flowErr)}</p><button class="btn" data-retry>Try again</button></div>`;
+    if (!flow) return '<div class="card"><p class="sub">Loading…</p></div>';
+    const ms = flow.months, any = ms.some((m) => m.income || m.expenses);
+    if (!any) return '<div class="card"><h3>No cash flow yet</h3><p class="sub">Add transactions in Banking and your income and spending appear here.</p><a class="btn" href="#banking">Go to Banking</a></div>';
+    const w = 640, h = 240, max = Math.max(1, ...ms.flatMap((m) => [m.income, m.expenses])), bw = Math.min(34, 280 / ms.length), step = (w - 60) / ms.length;
+    const bars = ms.map((m, i) => { const x = 40 + i * step, hi = (m.income / max) * (h - 50), he = (m.expenses / max) * (h - 50);
+      return `<rect x="${x}" y="${h - 30 - hi}" width="${bw}" height="${hi}" rx="4" fill="#4f9cf0"><title>${mlabel(m.month)} income ${usd(m.income)}</title></rect><rect x="${x + bw + 4}" y="${h - 30 - he}" width="${bw}" height="${he}" rx="4" fill="#2fb589"><title>${mlabel(m.month)} expenses ${usd(m.expenses)}</title></rect><text x="${x + bw}" y="${h - 10}" fill="#8393ad" font-size="11" text-anchor="middle">${mlabel(m.month).split(' ')[0]}</text>`; }).join('');
+    const [yy, mm] = flow.currentMonth.split('-').map(Number), days = new Date(yy, mm, 0).getDate(), lead = new Date(yy, mm - 1, 1).getDay();
+    const vals = Array.from({ length: days }, (_, i) => flow.daily[`${flow.currentMonth}-${String(i + 1).padStart(2, '0')}`] || 0), mx = Math.max(1, ...vals);
+    const col = (v) => (v === 0 ? '#e8f3ec' : v < mx * 0.2 ? '#bfe3cb' : v < mx * 0.45 ? '#7ccb97' : v < mx * 0.75 ? '#3ea66b' : '#1f7a4d');
+    const heat = [...Array(lead).fill('<span></span>'), ...vals.map((v, i) => `<button style="background:${col(v)};${v >= mx * 0.75 ? 'color:#fff' : ''}" data-d="${i + 1}" data-v="${v}" aria-label="${MON[mm - 1]} ${i + 1}: ${usd(v, 2)}">${i + 1}</button>`)].join('');
+    const cur = ms[ms.length - 1];
+    return `<div class="grid g4"><div class="card kpi"><div class="l">Income (${mlabel(cur.month)})</div><div class="v num up">${usd(cur.income, 2)}</div></div><div class="card kpi"><div class="l">Expenses</div><div class="v num down">${usd(-cur.expenses, 2)}</div></div><div class="card kpi"><div class="l">Net cash flow</div><div class="v num ${cur.net < 0 ? 'down' : 'up'}">${usd(cur.net, 2)}</div></div><div class="card kpi"><div class="l">Savings rate</div><div class="v num">${cur.income ? Math.round((cur.net / cur.income) * 100) + '%' : '—'}</div></div></div>
+      <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Monthly cash flow</h3><div class="hint"><span style="color:#4f9cf0">■</span> Income &nbsp;<span style="color:#2fb589">■</span> Expenses · transfers excluded</div><svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Monthly income and expenses"><line x1="30" x2="${w}" y1="${h - 30}" y2="${h - 30}" stroke="#1c2a42"/>${bars}</svg>
+      <table style="margin-top:8px"><tr><th>Month</th><th class="r">Income</th><th class="r">Expenses</th><th class="r">Net</th></tr>${ms.map((m) => `<tr><td>${mlabel(m.month)}</td><td class="r num">${usd(m.income, 2)}</td><td class="r num">${usd(m.expenses, 2)}</td><td class="r num ${m.net < 0 ? 'down' : 'up'}">${usd(m.net, 2)}</td></tr>`).join('')}</table></div>
+      <div class="card"><h3>Spending heatmap · ${MON[mm - 1]} ${yy}</h3><div class="hint">Darker = higher daily spend. Click a day for details.</div><div class="dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="heat" id="heat">${heat}</div><div class="tip" id="heatTip" aria-live="polite">Select a day to see its spending.</div>
+      <h3 style="margin-top:14px">Top categories this month</h3>${flow.categories.length ? `<table>${flow.categories.slice(0, 8).map((c) => `<tr><td>${esc(c.category)}</td><td class="r num">${usd(c.amount, 2)}</td></tr>`).join('')}</table>` : '<p class="sub">No spending yet this month.</p>'}</div></div>`;
+  }
+  async function loadMore() {
+    try { txns = (await api('/transactions?limit=200')).transactions; txErr = null; } catch (e) { txErr = e.message; }
+    try { flow = await api('/cashflow?months=6'); flowErr = null; } catch (e) { flowErr = e.message; }
+    paintMore();
+  }
+  function paintMore() {
+    const bk = document.getElementById('v-banking'), cf = document.getElementById('v-cashflow');
+    if (bk) bk.innerHTML = bankingHtml();
+    if (cf) { cf.innerHTML = cashflowHtml(); const h = cf.querySelector('#heat'); if (h) h.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; const v = Number(b.dataset.v); const tip = cf.querySelector('#heatTip'); tip.textContent = v ? `Day ${b.dataset.d} · ${usd(v, 2)} spent` : `Day ${b.dataset.d} · no spending`; }; }
+    document.querySelectorAll('[data-retry]').forEach((b) => (b.onclick = () => { load(); }));
+    const f = document.getElementById('addTx');
+    if (f) f.onsubmit = async (e) => {
+      e.preventDefault(); const msg = f.querySelector('#tMsg'); msg.textContent = 'Saving…';
+      try {
+        await api('/transactions', { method: 'POST', body: JSON.stringify({ posted_on: f.querySelector('#tDate').value, account_id: f.querySelector('#tAcct').value, description: f.querySelector('#tDesc').value, category: f.querySelector('#tCat').value || null, amount: Number(f.querySelector('#tAmt').value) }) });
+        await loadMore();
+      } catch (err) { msg.textContent = err.message; }
+    };
+    document.querySelectorAll('[data-deltx]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('Delete this transaction?')) return;
+      try { await api('/transactions/' + b.dataset.deltx, { method: 'DELETE' }); await loadMore(); } catch (err) { alert(err.message); }
+    }));
+  }
+  V.banking = bankingHtml; V.cashflow = cashflowHtml;
 
   // Take over the two views and label the rest honestly.
   V.overview = overviewHtml;
   V.accounts = accountsHtml;
   const banner = document.querySelector('.banner');
-  if (banner) banner.innerHTML = 'Overview and Accounts show <b>your real data</b>. Other screens are still <b>sample data</b> until connected.';
+  if (banner) banner.innerHTML = 'Overview, Accounts, Banking and Cash Flow show <b>your real data</b>. Other screens are still <b>sample data</b> until connected.';
   Object.keys(done).forEach((k) => delete done[k]);
   route();
   api('/me').then((m) => {
