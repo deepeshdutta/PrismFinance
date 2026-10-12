@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrismFinance — Preview (sample data)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1220'/%3E%3Cpath d='M16 5 27 25H5z' fill='none' stroke='%234f9cf0' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M16 5v20' stroke='%2352c08a' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#070d18;--panel:#0d1626;--panel2:#111d31;--line:#1c2a42;--text:#e7edf7;--muted:#8393ad;--blue:#4f9cf0;--blue2:#3b82d6;--green:#52c08a;--red:#ee7a7a;--amber:#e6b450;
+--muse-badge-bg:#0d1626;--muse-badge-fg:#e7edf7;--muse-badge-border:#1c2a42}
+*{box-sizing:border-box;margin:0}
+html{color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:14px/1.5 'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.up{color:var(--green)}.down{color:var(--red)}.mut{color:var(--muted)}
+.banner{background:#13233d;border-bottom:1px solid var(--line);color:#a9c4ea;text-align:center;padding:6px 12px;font-size:12.5px}
+.banner button{background:none;border:0;color:var(--blue);text-decoration:underline;margin-left:8px}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 32px)}
+aside{background:var(--panel);border-right:1px solid var(--line);padding:20px 12px;position:sticky;top:0;height:calc(100vh - 32px)}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 10px 18px;font-weight:700;font-size:18px;letter-spacing:.2px}
+.brand svg{flex:none}
+nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:var(--muted);text-decoration:none;margin-bottom:2px}
+nav a:hover{background:var(--panel2);color:var(--text)}
+nav a.on{background:var(--blue);color:#05101f;font-weight:600}
+nav svg{width:18px;height:18px;flex:none}
+main{padding:22px 28px 90px;min-width:0}
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:26px;font-weight:650}
+.sub{color:var(--muted);font-size:13px}
+.who{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted)}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:6px 14px;border-radius:999px;font-size:13px;transition:.15s}
+.chip:hover{border-color:var(--blue)}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#05101f;font-weight:600}
+.chip.sm{padding:4px 11px;font-size:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:16px}
+.bar .lbl{color:var(--muted);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;margin-right:4px}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}.g21{grid-template-columns:2fr 1fr}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;min-width:0}
+.card h3{font-size:14px;font-weight:600;margin-bottom:2px}
+.card .hint{color:var(--muted);font-size:12px;margin-bottom:10px}
+.kpi .l{color:var(--muted);font-size:12.5px}
+.kpi .v{font-size:26px;font-weight:650;margin:2px 0}
+.kpi .d{font-size:12px;color:var(--muted)}
+.kpi.click{cursor:pointer;transition:.15s}.kpi.click:hover{border-color:var(--blue);transform:translateY(-1px)}
+.big{font-size:40px;font-weight:700;letter-spacing:-.5px}
+svg.chart{width:100%;height:auto;display:block}
+table{width:100%;border-collapse:collapse}
+th{color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);font-size:13.5px}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+.tag{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line)}
+.tag.ok{color:var(--green);border-color:#244f3d;background:#0f2a21}
+.tag.warn{color:var(--amber);border-color:#5a4720;background:#2a2210}
+.tag.off{color:var(--red);border-color:#5a2a2a;background:#2a1414}
+.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.heat button{aspect-ratio:1;border:0;border-radius:8px;font-size:11px;color:#0b2418;position:relative}
+.heat button:hover{outline:2px solid var(--blue)}
+.dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;color:var(--muted);font-size:11px;text-align:center;margin-bottom:6px}
+.legend{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-top:12px}
+.legend i{width:16px;height:16px;border-radius:4px;display:inline-block}
+.tip{margin-top:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px;min-height:44px}
+.spark{width:90px;height:28px}
+.holding{display:grid;grid-template-columns:70px 1fr 100px 90px;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.holding:last-child{border:0}
+.drop{border:2px dashed #2a4268;border-radius:16px;padding:36px;text-align:center;color:var(--muted);background:var(--panel2)}
+.steps{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.steps span{padding:6px 12px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.steps span.on{color:var(--text);border-color:var(--blue)}
+.view{display:none}.view.on{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.view.on{animation:none}*{transition:none!important}}
+/* login + denial */
+.gate{position:fixed;inset:0;z-index:50;background:radial-gradient(1200px 600px at 70% -10%,#12294a 0,var(--bg) 60%);display:none;align-items:center;justify-content:center;padding:20px}
+.gate.on{display:flex}
+.gbox{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:30px}
+.gbox h2{font-size:22px;margin:14px 0 4px}
+input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--text);font:inherit;margin:10px 0}
+input:focus{outline:2px solid var(--blue);border-color:transparent}
+.btn{width:100%;background:var(--blue);border:0;color:#05101f;font-weight:650;padding:11px;border-radius:10px;margin-top:4px}
+.btn:hover{background:#6aaef5}
+.deny{max-width:760px;display:grid;grid-template-columns:1fr 1fr;gap:0;padding:0;overflow:hidden}
+.deny img{width:100%;height:100%;object-fit:cover;display:block;min-height:320px}
+.deny .t{padding:30px;display:flex;flex-direction:column;justify-content:center}
+.deny .rej{background:#2a1414;border:1px solid #5a2a2a;color:#f3b0b0;border-radius:10px;padding:10px 12px;font-weight:600;margin-bottom:12px}
+#museUser{position:fixed;right:16px;top:44px;z-index:40;display:none;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 14px;font-size:12.5px}
+#museUser button{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 12px}
+.muse-badge{position:fixed;right:16px;bottom:16px;z-index:9999;display:inline-flex;align-items:center;gap:.25rem;padding:.45rem 1rem;border-radius:999px;border:1px solid var(--muse-badge-border,rgba(255,255,255,.16));background:var(--muse-badge-bg,#0b0d11);color:var(--muse-badge-fg,#fff);font:500 13px/1.2 system-ui;letter-spacing:.01em;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.3);transition:transform .2s ease,filter .2s ease,box-shadow .2s ease}
+.muse-badge img{width:1.35em;height:1.35em;object-fit:contain;flex-shrink:0}
+.muse-badge:hover{transform:translateY(-1px);filter:brightness(1.06);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+@media(max-width:980px){.g4{grid-template-columns:1fr 1fr}.g21,.g2,.g3{grid-template-columns:1fr}}
+@media(max-width:760px){.shell{grid-template-columns:1fr}
+aside{position:fixed;bottom:0;left:0;right:0;top:auto;height:auto;z-index:30;padding:6px;border-right:0;border-top:1px solid var(--line);overflow-x:auto}
+.brand{display:none}nav{display:flex;gap:4px}nav a{flex-direction:column;gap:2px;font-size:10.5px;padding:6px 10px;white-space:nowrap;margin:0}
+main{padding:16px 14px 110px}.deny{grid-template-columns:1fr}.deny img{min-height:220px;max-height:260px}.holding{grid-template-columns:60px 1fr 80px}.holding .spark{display:none}.big{font-size:32px}}
+</style>
+</head>
+<body>
+<div class="banner">Preview with <b>sample data only</b> — no real accounts. <button id="showLogin">Login screen</button><button id="showDeny">Access-denied screen</button></div>
+
+<div class="gate" id="login"><div class="gbox">
+  <div class="brand" style="padding:0"><svg width="28" height="28" viewBox="0 0 32 32"><path d="M16 5 27 25H5z" fill="none" stroke="#4f9cf0" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 5v20" stroke="#52c08a" stroke-width="2"/></svg>PrismFinance</div>
+  <h2>Sign in</h2><p class="sub">Approved emails only. We'll send a one-time code.</p>
+  <form id="loginForm"><label class="sub" for="em">Email</label><input id="em" type="email" placeholder="you@example.com" autocomplete="email" required>
+  <div id="codeRow" style="display:none"><label class="sub" for="cd">One-time code</label><input id="cd" inputmode="numeric" placeholder="6-digit code" maxlength="6"></div>
+  <button class="btn" id="loginBtn" type="submit">Send code</button></form>
+  <p class="sub" style="margin-top:12px">Preview: any email with "ok" enters; anything else meets the guard pup.</p>
+</div></div>
+
+<div class="gate" id="denied"><div class="gbox deny">
+  <img src="assets/images/puppy.png" alt="A puppy security guard looking apologetic">
+  <div class="t"><div class="rej" role="alert">Currently you are not allowed — Contact Admin</div>
+  <h2 style="margin:0 0 6px">Sorry, this pup is on duty.</h2><p class="sub">Nothing is shown here: no accounts, no menus. Ask the admin to approve your email.</p>
+  <button class="chip" style="margin-top:16px;align-self:flex-start" id="back">Back to preview</button></div>
+</div></div>
+
+<div class="shell" id="app">
+<aside><div class="brand"><svg width="26" height="26" viewBox="0 0 32 32"><path d="M16 5 27 25H5z" fill="none" stroke="#4f9cf0" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 5v20" stroke="#52c08a" stroke-width="2"/></svg>PrismFinance</div>
+<nav id="nav" aria-label="Primary"></nav></aside>
+<main>
+<header class="top"><div><h1 id="title">Overview</h1><div class="sub" id="subt"></div></div>
+<div class="who"><span>Data as of Oct 12, 2026 8:39 AM ET · UTC stored, ET shown</span><span class="tag">Sample</span></div></header>
+<div id="views"></div>
+</main></div>
+
+<div id="museUser"><span id="museUserNickname"></span><button id="museLogout">Logout</button></div>
+<a class="muse-badge" href="https://museai.im/home" target="_blank" rel="noopener noreferrer"><img src="assets/images/icon.png" alt="" aria-hidden="true"><span>Build by MuseWork</span></a>
+
+<script>
+// ---------- helpers ----------
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646};
+const $=(s,r=document)=>r.querySelector(s);
+const usd=(n,d=0)=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const sgn=(n)=>(n>=0?'+':'-')+'$'+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:0});
+function path(pts,w,h,min,max,pad=4){const x=i=>pad+i*(w-2*pad)/(pts.length-1),y=v=>h-pad-(v-min)/(max-min||1)*(h-2*pad);return pts.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join('')}
+function line(pts,{w=640,h=220,color='#4f9cf0',fill=true,labels=[],yfmt=usd}={}){
+  const min=Math.min(...pts)*0.97,max=Math.max(...pts)*1.02,p=path(pts,w,h-22,min,max,6);
+  let g='';for(let i=0;i<4;i++){const yy=6+i*(h-34)/3;g+=`<line x1="0" x2="${w}" y1="${yy}" y2="${yy}" stroke="#1c2a42" stroke-dasharray="3 5"/><text x="${w}" y="${yy-3}" fill="#8393ad" font-size="10" text-anchor="end">${yfmt(max-(max-min)*i/3)}</text>`}
+  const lb=labels.map((t,i)=>`<text x="${6+i*(w-12)/(labels.length-1)}" y="${h-4}" fill="#8393ad" font-size="10" text-anchor="middle">${t}</text>`).join('');
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Line chart">${g}${fill?`<path d="${p}L${w-6} ${h-22}L6 ${h-22}Z" fill="${color}" opacity=".13"/>`:''}<path d="${p}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round"/>${lb}</svg>`}
+function spark(pts,up){const c=up?'#52c08a':'#ee7a7a';return `<svg class="spark" viewBox="0 0 90 28"><path d="${path(pts,90,28,Math.min(...pts),Math.max(...pts),2)}" fill="none" stroke="${c}" stroke-width="1.6"/></svg>`}
+function walk(n,start,vol,drift=0){const a=[start];for(let i=1;i<n;i++)a.push(a[i-1]*(1+drift+(rnd()-.5)*vol));return a}
+const months=['May','Jun','Jul','Aug','Sep','Oct'];
+const inc=[11200,12500,11900,13200,12500,12900],exp=[7600,7200,8100,7500,7200,6800];
+
+// ---------- views ----------
+const V={};
+V.overview=()=>{const nw=walk(24,205000,.02,.008).map(Math.round);
+return `<div class="grid g4">
+${[['Total assets','$245,800','3 of 4 sources fresh'],['Total liabilities','$82,400','Mortgage + card'],['Net worth','$163,400','+$2,140 vs last month'],['MTD net cash flow','+$6,100','Income $12,900 · Expenses $6,800']].map(([l,v,d],i)=>`<div class="card kpi click" tabindex="0" data-go="${i==3?'cashflow':'accounts'}"><div class="l">${l}</div><div class="v num ${i==3?'up':''}">${v}</div><div class="d">${d}</div></div>`).join('')}</div>
+<div class="grid g21" style="margin-top:14px"><div class="card"><h3>Net worth</h3><div class="hint">Dated balances · included accounts only</div>${line(nw,{labels:['Nov','Jan','Mar','May','Jul','Sep']})}</div>
+<div class="card"><h3>Data coverage</h3><div class="hint">Never shown as current when stale</div>
+${[['First Harbor Bank','Synced 8:36 AM','ok'],['Northline Brokerage','Synced 8:39 AM','ok'],['Retirement (file import)','Statement to Sep 30','warn'],['Harbor Card','Reconnect needed','off']].map(([n,t,k])=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)"><div>${n}<div class="sub">${t}</div></div><span class="tag ${k}">${k=='ok'?'Healthy':k=='warn'?'Partial':'Disconnected'}</span></div>`).join('')}
+<p class="sub" style="margin-top:10px">Totals include 3 of 4 sources — marked partial.</p></div></div>`};
+
+V.accounts=()=>{const rows=[['First Harbor Bank',[['Everyday checking','•••• 4821','Checking',8420.55,'Ledger balance','Oct 12','ok'],['Reserve savings','•••• 1190','Savings',22600,'Available balance','Oct 12','ok']]],
+['Northline Brokerage',[['Taxable brokerage','•••• 7734','Brokerage',86400,'Market value','Oct 12','ok'],['Roth IRA','•••• 2208','Retirement',45755.89,'Market value','Sep 30','warn']]],
+['Harbor Card',[['Rewards card','•••• 9051','Credit card',-3180,'Statement balance','Oct 3','off']]],
+['First Harbor Mortgage',[['Oak Street mortgage','•••• 6612','Loan',-286400,'Outstanding principal','Oct 1','ok']]]];
+return rows.map(([inst,a])=>`<div class="card" style="margin-bottom:14px"><h3>${inst}</h3><div class="hint">Identifiers masked · balance type and refresh shown per account</div><div style="overflow-x:auto"><table><tr><th>Account</th><th>Type</th><th>Balance type</th><th>As of</th><th>Health</th><th class="r">Balance</th></tr>${a.map(x=>`<tr><td>${x[0]} <span class="mut">${x[1]}</span></td><td>${x[2]}</td><td>${x[4]}</td><td>${x[5]}</td><td><span class="tag ${x[6]}">${x[6]=='ok'?'Healthy':x[6]=='warn'?'Stale':'Disconnected'}</span></td><td class="r num ${x[3]<0?'down':''}">${usd(x[3],2)}</td></tr>`).join('')}</table></div></div>`).join('')};
+
+V.banking=()=>{const t=[['Oct 12','Northwind Payroll','Income',6450],['Oct 11','Market Basket','Groceries',-86.42],['Oct 11','City Utilities','Bills',-142.1],['Oct 10','Corner Café','Dining',-18.75],['Oct 10','Transfer to savings','Transfer',-500],['Oct 9','Fuel Stop','Transport',-54.3],['Oct 8','Streamly','Subscriptions',-15.99]];
+return `<div class="bar"><span class="lbl">Search</span><input style="width:220px;margin:0" placeholder="Merchant or category" aria-label="Search transactions"><span class="lbl" style="margin-left:8px">Category</span>${['All','Income','Groceries','Bills','Dining'].map((c,i)=>`<button class="chip sm ${i?'':'on'}">${c}</button>`).join('')}</div>
+<div class="card"><h3>Recent transactions</h3><div class="hint">Transfers are excluded from income and expenses by default</div><div style="overflow-x:auto"><table><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Counted</th><th class="r">Amount</th></tr>${t.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[2]=='Transfer'?'<span class="tag">Excluded</span>':'<span class="tag ok">Yes</span>'}</td><td class="r num ${r[3]>0?'up':''}">${(r[3]>0?'+':'')+usd(r[3],2)}</td></tr>`).join('')}</table></div></div>`};
+
+V.cashflow=()=>{const w=640,h=240,max=15000,bw=34;let bars='';
+months.forEach((m,i)=>{const x=40+i*100;bars+=`<rect x="${x}" y="${h-30-inc[i]/max*(h-50)}" width="${bw}" height="${inc[i]/max*(h-50)}" rx="4" fill="#4f9cf0"><title>${m} income ${usd(inc[i])}</title></rect><rect x="${x+bw+3}" y="${h-30-exp[i]/max*(h-50)}" width="${bw}" height="${exp[i]/max*(h-50)}" rx="4" fill="#2fb589"><title>${m} expenses ${usd(exp[i])}</title></rect><text x="${x+bw}" y="${h-10}" fill="#8393ad" font-size="11" text-anchor="middle">${m}</text>`});
+const cells=[];seed=11;for(let d=1;d<=31;d++){const v=rnd()<.18?0:Math.round(rnd()*rnd()*420);cells.push(v)}
+const col=v=>v==0?'#e8f3ec':v<60?'#bfe3cb':v<160?'#7ccb97':v<300?'#3ea66b':'#1f7a4d';
+const heat=['','','',...cells].map((v,i)=>i<3?'<span></span>':`<button style="background:${col(v)};${v>=300?'color:#fff':''}" data-d="${i-2}" data-v="${v}" aria-label="Oct ${i-2}: ${usd(v)}">${i-2}</button>`).join('');
+return `<div class="bar"><span class="lbl">Range</span>${['3M','6M','YTD','1Y'].map((c,i)=>`<button class="chip sm ${i==1?'on':''}">${c}</button>`).join('')}<span class="lbl" style="margin-left:10px">Category</span><button class="chip sm on">All</button><button class="chip sm">Dining</button><button class="chip sm">Groceries</button></div>
+<div class="grid g2"><div class="card"><h3>Monthly cash flow</h3><div class="hint"><span style="color:#4f9cf0">■</span> Income &nbsp;<span style="color:#2fb589">■</span> Expenses · transfers excluded</div><svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Income versus expenses by month"><line x1="30" x2="${w}" y1="${h-30}" y2="${h-30}" stroke="#1c2a42"/>${bars}</svg>
+<table style="margin-top:8px"><tr><th>Month</th><th class="r">Income</th><th class="r">Expenses</th><th class="r">Net</th><th class="r">MoM</th></tr>${months.map((m,i)=>{const n=inc[i]-exp[i],p=i?n-(inc[i-1]-exp[i-1]):0;return `<tr><td>${m}</td><td class="r num">${usd(inc[i])}</td><td class="r num">${usd(exp[i])}</td><td class="r num up">${usd(n)}</td><td class="r num ${p>=0?'up':'down'}">${i?sgn(p):'—'}</td></tr>`}).join('')}</table></div>
+<div class="card"><h3>Spending heatmap · October</h3><div class="hint">Darker = higher daily spend. Click a day for details.</div><div class="dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="heat" id="heat">${heat}</div>
+<div class="legend">Less ${['#e8f3ec','#bfe3cb','#7ccb97','#3ea66b','#1f7a4d'].map(c=>`<i style="background:${c}"></i>`).join('')} More <span style="margin-left:8px">$0 · &lt;$60 · &lt;$160 · &lt;$300 · $300+</span></div>
+<div class="tip" id="heatTip" aria-live="polite">Select a day to see its spending.</div></div></div>`};
+
+V.investments=()=>{const ranges=['1D','1W','1M','3M','6M','YTD','1Y','2Y','3Y','All'];const pts=walk(60,120000,.03,.006);
+const hold=[['MSFT','13.97 sh',1685.48,28.92,1],['VTI','3.25 sh',270.08,27.85,1],['VWO','18.91 sh',207.58,22.51,1],['VEA','17.61 sh',315.41,34.32,1],['BND','17.68 sh',-52.05,-4.02,0],['SOXX','10.45 sh',3247.37,132.52,1],['JEPQ','31.75 sh',175.44,9.98,1]];
+return `<div class="bar"><span class="lbl">Accounts</span><button class="chip sm on">All</button><button class="chip sm">Taxable</button><button class="chip sm">Roth IRA</button><span class="lbl" style="margin-left:10px">Year</span>${['2024','2025','2026'].map((y,i)=>`<button class="chip sm ${i==2?'on':''}">${y}</button>`).join('')}</div>
+<div class="grid g21"><div class="card"><div class="sub">Total value</div><div class="big num">$132,155.89</div><div class="num down" style="font-size:13px;margin:2px 0 8px">▼ $145.99 (0.11%) today · as of Oct 12, 8:39 AM ET</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${ranges.map(r=>`<button class="chip sm ${r=='1Y'?'on':''}">${r}</button>`).join('')}</div>${line(pts,{labels:['Nov','Jan','Mar','May','Jul','Sep']})}
+<p class="sub" style="margin-top:6px">3Y and All: history starts Nov 2023 — earlier range shows a coverage gap.</p></div>
+<div class="card"><h3>Stocks &amp; ETFs</h3><div class="hint">Price trends shown only when market data is licensed (sample)</div>${hold.map(([t,s,g,p,u])=>{seed=t.charCodeAt(0)*13;return `<div class="holding"><b>${t}</b><span class="mut">${s}</span>${spark(walk(26,100,.05,u?.004:-.003),u)}<span class="r num ${u?'up':'down'}" style="text-align:right">${sgn(g)}<br><small>${p>0?'+':''}${p}%</small></span></div>`}).join('')}</div></div>`};
+
+V.trading=()=>{seed=21;const mp=[150,-1500,-1150,1100,60,1300,12800,3900,6800,8000,6400,-120];const mm=['J','F','M','A','M','J','J','A','S','O','N','D'];
+const w=520,h=230,mx=14000,mn=-4500,zy=10+(mx/(mx-mn))*(h-50);
+const bars=mp.map((v,i)=>{const x=34+i*40,bh=Math.abs(v)/(mx-mn)*(h-50);return `<rect x="${x}" y="${v>=0?zy-bh:zy}" width="26" height="${Math.max(bh,1)}" rx="3" fill="${v>=0?'#52c08a':'#ee7a7a'}"><title>${mm[i]}: ${sgn(v)}</title></rect><text x="${x+13}" y="${h-8}" fill="#8393ad" font-size="10" text-anchor="middle">${mm[i]}</text>`}).join('');
+const daily=[];let cum=0;const cumPts=[];for(let i=0;i<120;i++){const v=rnd()<.7?0:(rnd()-.35)*(rnd()<.05?9000:1400);daily.push(v);cum+=v;cumPts.push(cum)}
+const W=900,H=230,dm=Math.max(...daily.map(Math.abs)),cmx=Math.max(...cumPts),cmn=Math.min(...cumPts);
+const db=daily.map((v,i)=>{const x=10+i*(W-60)/120,bh=Math.abs(v)/dm*80;return `<rect x="${x.toFixed(1)}" y="${v>=0?110-bh:110}" width="3" height="${bh.toFixed(1)}" fill="${v>=0?'#52c08a':'#ee7a7a'}"/>`}).join('');
+const cl=cumPts.map((v,i)=>(i?'L':'M')+(10+i*(W-60)/120).toFixed(1)+' '+(205-(v-cmn)/(cmx-cmn)*170).toFixed(1)).join('');
+return `<div class="bar" style="padding:6px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%">${['Summary','Accounts','Activity','Holdings'].map((t,i)=>`<button class="chip ${i==0?'on':''}" style="border-radius:10px">${t}</button>`).join('')}</div></div>
+<div class="bar"><span class="lbl">From</span><span class="chip">10/31/2022</span><span class="lbl">To</span><span class="chip">10/12/2026</span><span class="lbl" style="margin-left:10px">Accounts</span><button class="chip sm on">Taxable $58,865</button><button class="chip sm on">Roth IRA $45,756</button><button class="chip sm on">Joint $4,805</button><button class="chip sm on">Rollover $56,693</button><span class="sub" style="margin-left:auto">966 txs · 2022-10-31 → 2026-10-08</span></div>
+<div class="grid g21"><div class="card"><div class="sub">TOTAL VALUE</div><div class="big num">$166,118.96</div><div class="num up" style="margin:2px 0 10px">Since last close +$5,826.69 (+3.64%) &nbsp;·&nbsp; 2Y +$43,412.51 (+35.38%)</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${['1D','1W','1M','3M','6M','YTD','1Y','2Y','3Y','4Y','Custom'].map(r=>`<button class="chip sm ${r=='2Y'?'on':''}">${r}</button>`).join('')}</div>${line(walk(60,98000,.035,.009),{labels:['Nov 24','Jan 25','Apr 25','Jun 25','Aug 25','Oct 25','Mar 26','Oct 26']})}</div>
+<div class="grid" style="align-content:start">
+<div class="card kpi"><div class="l">Net invested</div><div class="v num">$70,892.40</div><div class="d">In $73,705.27 · Out $2,812.87 (deposits are not profit)</div></div>
+<div class="card kpi"><div class="l">Current value</div><div class="v num">$166,118.96</div><div class="d">Holdings + cash</div></div>
+<div class="card kpi"><div class="l">Total P&amp;L</div><div class="v num up">$39,216.23</div><div class="d">Realized $83,244.99 · Unrealized <span class="down">-$153,309.12</span> · Cost basis: N/A on 2 holdings</div></div></div></div>
+<div class="grid g2" style="margin-top:14px"><div class="card"><h3>Growth</h3><div class="hint">Invested vs value</div>${line(walk(12,82000,.03,.025),{h:230,w:520,labels:['Jan','Mar','May','Jul','Sep','Dec']})}</div>
+<div class="card"><h3>Monthly P&amp;L · 2025</h3><div class="hint">Click a bar to drill in</div><svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Monthly profit and loss"><line x1="30" x2="${w}" y1="${zy}" y2="${zy}" stroke="#1c2a42"/>${bars}</svg></div></div>
+<div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><h3>Daily realized P&amp;L</h3><div><button class="chip sm on">Day</button> <button class="chip sm">Week</button> <button class="chip sm">Month</button> <button class="chip sm">Year</button></div></div><div class="hint">Bars = period P&amp;L · line = cumulative</div>
+<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily P&L with cumulative line"><line x1="0" x2="${W}" y1="110" y2="110" stroke="#1c2a42"/>${db}<path d="${cl}" fill="none" stroke="#6fd0b4" stroke-width="2"/></svg></div>`};
+
+V.imports=()=>`<div class="card"><h3>Upload a statement</h3><div class="hint">PDF, XLSX, CSV or JSON · nothing is saved until you confirm</div>
+<div class="steps"><span class="on">1 Upload</span><span>2 Map account</span><span>3 Map columns</span><span>4 Preview &amp; errors</span><span>5 Commit</span></div>
+<div class="drop"><b style="color:var(--text)">Drop a file here</b><br>or choose from your device<br><small>Re-importing the same statement adds zero duplicates.</small></div></div>
+<div class="card" style="margin-top:14px"><h3>Import history</h3><table><tr><th>File</th><th>Detected range</th><th>Rows</th><th>Status</th></tr><tr><td>roth_sep_2026.csv</td><td>Sep 1 – Sep 30</td><td>118</td><td><span class="tag ok">Committed</span></td></tr><tr><td>checking_aug.pdf</td><td>Aug 1 – Aug 31</td><td>64 (3 errors)</td><td><span class="tag warn">Needs review</span></td></tr></table></div>`;
+
+V.settings=()=>`<div class="grid g2"><div class="card"><h3>Approved members</h3><div class="hint">Each member's financial data is private to them</div>
+<table><tr><th>Email</th><th>Role</th><th>Status</th></tr><tr><td>deepesh.dutta@gmail.com</td><td>Owner</td><td><span class="tag ok">Active</span></td></tr><tr><td>member2@example.com</td><td>Viewer</td><td><span class="tag ok">Active</span></td></tr><tr><td>member3@example.com</td><td>Viewer</td><td><span class="tag off">Revoked</span></td></tr></table>
+<p class="sub" style="margin-top:10px">Admins manage access — they cannot see other members' balances.</p></div>
+<div class="card"><h3>Preferences</h3><div class="hint">Display only</div><table><tr><td>Timezone</td><td class="r">America/New_York</td></tr><tr><td>Reporting currency</td><td class="r">USD</td></tr><tr><td>Session length</td><td class="r">12 hours</td></tr></table></div></div>`;
+
+// ---------- shell ----------
+const NAV=[['overview','Overview','M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],['accounts','Accounts','M3 10h18M5 10V20M10 10V20M14 10V20M19 10V20M2 20h20M12 3l9 5H3z'],['banking','Banking','M3 6h18v12H3zM3 10h18'],['cashflow','Cash Flow','M5 20V10M12 20V4M19 20v-7'],['investments','Investments','M3 17l6-6 4 4 8-9'],['trading','Trading P&L','M4 4v16h16M8 14l3-4 3 3 4-6'],['imports','Imports','M12 3v12M7 10l5 5 5-5M4 20h16'],['settings','Settings','M12 8a4 4 0 100 8 4 4 0 000-8zM12 2v3M12 19v3M2 12h3M19 12h3']];
+const SUB={overview:'Everything at a glance · click any figure to trace it',accounts:'Grouped by institution · identifiers masked',banking:'Transactions across linked and imported accounts',cashflow:'Income, expenses and daily spending',investments:'Holdings and performance',trading:'Schwab-style capital & profits (sample)',imports:'Manual fallback for unsupported sources',settings:'Members and preferences'};
+$('#nav').innerHTML=NAV.map(([k,l,d])=>`<a href="#${k}" data-k="${k}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>${l}</a>`).join('');
+$('#views').innerHTML=NAV.map(([k])=>`<section class="view" id="v-${k}"></section>`).join('');
+const done={};
+function route(){const k=(location.hash.slice(1)||'overview');const key=V[k]?k:'overview';
+  if(!done[key]){$('#v-'+key).innerHTML=V[key]();done[key]=1;bind(key)}
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id=='v-'+key));
+  document.querySelectorAll('#nav a').forEach(a=>{a.classList.toggle('on',a.dataset.k==key);a.toggleAttribute('aria-current',a.dataset.k==key)});
+  $('#title').textContent=NAV.find(n=>n[0]==key)[1];$('#subt').textContent=SUB[key];scrollTo(0,0)}
+function bind(key){const r=$('#v-'+key);
+  r.querySelectorAll('.bar,.chip').length&&r.querySelectorAll('.chip.sm').forEach(c=>c.addEventListener('click',()=>{const sib=[...c.parentElement.children].filter(x=>x.classList.contains('chip')&&x.classList.contains('sm'));
+    if(c.parentElement.querySelector('.lbl')&&/Accounts/.test(c.parentElement.textContent)&&c.textContent.includes('$')){c.classList.toggle('on');return}
+    sib.forEach(s=>s.classList.remove('on'));c.classList.add('on')}));
+  r.querySelectorAll('[data-go]').forEach(c=>{const go=()=>location.hash=c.dataset.go;c.addEventListener('click',go);c.addEventListener('keydown',e=>{if(e.key=='Enter')go()})});
+  const h=$('#heat',r);if(h)h.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=+b.dataset.v;
+    $('#heatTip').innerHTML=v?`<b>Oct ${b.dataset.d}</b> · ${usd(v)} spent<br><span class="mut">Market Basket $86.42 · Corner Café $18.75 · Fuel Stop $54.30 …</span>`:`<b>Oct ${b.dataset.d}</b> · no spending`})}
+window.addEventListener('hashchange',route);route();
+// gates
+const show=(id,on)=>$('#'+id).classList.toggle('on',on);
+$('#showLogin').onclick=()=>{show('login',true);$('#em').focus()};
+$('#showDeny').onclick=()=>show('denied',true);
+$('#back').onclick=()=>show('denied',false);
+$('#loginForm').addEventListener('submit',e=>{e.preventDefault();
+  if($('#codeRow').style.display=='none'){const em=$('#em').value.toLowerCase();
+    if(!em.includes('ok')){show('login',false);show('denied',true);return}
+    $('#codeRow').style.display='block';$('#loginBtn').textContent='Verify code';$('#cd').focus();return}
+  show('login',false);$('#codeRow').style.display='none';$('#loginBtn').textContent='Send code';$('#cd').value=''});
+// user module (single /app-session/me fetch)
+(function(){const APP_ID=location.pathname.split('/')[2]||'';const el=$('#museUser');
+  fetch('/app-session/me?app_id='+APP_ID).then(r=>r.ok?r.json():null).then(u=>{if(u){$('#museUserNickname').textContent=u.nickname||u.email.split('@')[0];el.style.display='flex';const s=document.querySelector('.muse-badge span');if(s)s.style.display='none'}}).catch(()=>{});
+  $('#museLogout').addEventListener('click',()=>fetch('/app-session/logout?app_id='+APP_ID,{method:'POST'}).then(()=>location.reload()))})();
+</script>
+</body>
+</html>
