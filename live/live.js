@@ -45,13 +45,14 @@
     if (!me) return '<div class="card"><p class="sub">Loading…</p></div>';
     return kpis() + (accounts.length ? '' : '<div class="card" style="margin-top:14px"><h3>Welcome</h3><p class="sub">Go to Accounts and add your first account to see your net worth here.</p><a class="btn" href="#accounts">Add an account</a></div>');
   }
-  function accountsHtml() { return error ? errHtml() : !me ? '<div class="card"><p class="sub">Loading…</p></div>' : form() + table(); }
+  function accountsHtml() { return error ? errHtml() : !me ? '<div class="card"><p class="sub">Loading…</p></div>' : plaidHtml() + form() + table(); }
   const errHtml = () => `<div class="card"><h3>Couldn't load your data</h3><p class="sub">${esc(error)}</p><button class="btn" data-retry>Try again</button></div>`;
   function paint() {
     const ov = document.getElementById('v-overview'), ac = document.getElementById('v-accounts');
     if (!ov || !ac) return;
     ov.innerHTML = overviewHtml(); ac.innerHTML = accountsHtml();
     document.querySelectorAll('[data-retry]').forEach((b) => (b.onclick = load));
+    bindPlaid(ac);
     const f = document.getElementById('addAcct');
     if (f) f.onsubmit = async (e) => {
       e.preventDefault(); const msg = document.getElementById('fMsg'); msg.textContent = 'Saving…';
@@ -155,6 +156,59 @@
   }
   V.banking = bankingHtml; V.cashflow = cashflowHtml;
 
+
+  // ---------- Plaid: connect banks ----------
+  let plaidState = { configured: false, environment: null, items: [], busy: '' };
+  function loadPlaidScript() {
+    return new Promise((res, rej) => {
+      if (window.Plaid) return res();
+      const sc = document.createElement('script'); sc.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+      sc.onload = res; sc.onerror = () => rej(new Error('Could not load Plaid Link.')); document.head.appendChild(sc);
+    });
+  }
+  function plaidHtml() {
+    if (!canWrite && !plaidState.items.length) return '';
+    if (!plaidState.configured) return '<div class="card" style="margin-bottom:14px"><h3>Connect your banks</h3><p class="sub">Bank linking is not switched on yet. It activates once the Plaid keys are added to the server.</p></div>';
+    const env = plaidState.environment === 'production' ? '' : ' <span class="tag">' + esc(plaidState.environment) + ' test mode</span>';
+    const items = plaidState.items.map((i) => `<tr><td>${esc(i.institution_name || 'Bank')}</td><td>${i.status === 'ok' ? '<span class="tag ok">Connected</span>' : '<span class="tag">Needs attention</span>'}</td><td>${esc(i.last_synced_at ? new Date(i.last_synced_at).toLocaleString() : 'Not yet')}</td>${canWrite ? `<td class="r"><button class="chip sm" data-unlink="${esc(i.id)}">Disconnect</button></td>` : ''}</tr>`).join('');
+    return `<div class="card" style="margin-bottom:14px"><h3>Connect your banks${env}</h3><div class="hint">Linked through Plaid. Your login goes to your bank, never to us. Only you can see these accounts.</div>
+      ${items ? `<div style="overflow-x:auto"><table><tr><th>Bank</th><th>Status</th><th>Last synced</th>${canWrite ? '<th></th>' : ''}</tr>${items}</table></div>` : ''}
+      ${canWrite ? `<div style="margin-top:10px"><button class="btn" id="plaidConnect" ${plaidState.busy ? 'disabled' : ''}>Connect a bank</button> ${plaidState.items.length ? '<button class="chip" id="plaidSync">Sync now</button>' : ''} <span class="sub" id="plaidMsg" role="status">${esc(plaidState.busy)}</span></div>` : ''}</div>`;
+  }
+  async function loadPlaid() {
+    try {
+      const st = await api('/plaid/status'); plaidState.configured = st.configured; plaidState.environment = st.environment;
+      plaidState.items = st.configured ? (await api('/plaid/items')).items : [];
+    } catch { /* leave as not configured */ }
+  }
+  function bindPlaid(root) {
+    const say = (t) => { const m = root.querySelector('#plaidMsg'); if (m) m.textContent = t; };
+    const c = root.querySelector('#plaidConnect');
+    if (c) c.onclick = async () => {
+      try {
+        say('Starting…'); c.disabled = true;
+        const [{ link_token }] = await Promise.all([api('/plaid/link-token', { method: 'POST' }), loadPlaidScript()]);
+        const h = window.Plaid.create({ token: link_token,
+          onSuccess: async (public_token, meta) => {
+            say('Linking and importing…');
+            try { const r = await api('/plaid/exchange', { method: 'POST', body: JSON.stringify({ public_token, institution_name: meta && meta.institution ? meta.institution.name : null }) }); say('Imported ' + r.sync.added + ' transactions.'); }
+            catch (e) { say(e.message); }
+            await refreshAll();
+          },
+          onExit: () => { c.disabled = false; say(''); } });
+        h.open();
+      } catch (e) { c.disabled = false; say(e.message); }
+    };
+    const sy = root.querySelector('#plaidSync');
+    if (sy) sy.onclick = async () => { say('Syncing…'); try { const r = await api('/plaid/sync', { method: 'POST' }); say(r.sync.failed ? 'Some banks need attention.' : 'Up to date (+' + r.sync.added + ').'); } catch (e) { say(e.message); } await refreshAll(); };
+    root.querySelectorAll('[data-unlink]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('Disconnect this bank? Imported history stays; no new data will sync.')) return;
+      try { await api('/plaid/items/' + b.dataset.unlink, { method: 'DELETE' }); } catch (e) { alert(e.message); }
+      await refreshAll();
+    }));
+  }
+  async function refreshAll() { await loadPlaid(); await load(); }
+
   // Take over the two views and label the rest honestly.
   V.overview = overviewHtml;
   V.accounts = accountsHtml;
@@ -165,6 +219,6 @@
   api('/me').then((m) => {
     me = m; canWrite = m.role === 'owner';
     const tag = document.querySelector('.who .tag'); if (tag) tag.textContent = m.email;
-    return load();
+    return loadPlaid().then(load);
   }).catch((e) => { error = e.message; paint(); });
 })();

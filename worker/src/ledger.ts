@@ -5,9 +5,9 @@ type Fetcher = typeof fetch;
 export class HttpError extends Error { constructor(readonly status: number, readonly code: string) { super(code); } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-interface Ctx { database: string; key: string; ownerId: string; role: 'owner' | 'viewer'; fetcher: Fetcher; }
+export interface Ctx { database: string; key: string; ownerId: string; role: 'owner' | 'viewer'; fetcher: Fetcher; plaid?: import('./plaid').PlaidConfig; }
 
-async function db(ctx: Ctx, path: string, init: RequestInit = {}, query: Record<string, string> = {}) {
+export async function db(ctx: Ctx, path: string, init: RequestInit = {}, query: Record<string, string> = {}) {
   const url = new URL(`${ctx.database}/rest/v1/${path}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   const send = ctx.fetcher; // call detached: Workers throw "Illegal invocation" if fetch is invoked as a method

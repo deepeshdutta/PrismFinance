@@ -1,4 +1,5 @@
 import { route, HttpError } from './ledger';
+import { plaidRoute } from './plaid';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export interface Env {
@@ -6,6 +7,10 @@ export interface Env {
   ACCESS_AUD: string;
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
+  PLAID_CLIENT_ID?: string;
+  PLAID_SECRET?: string;
+  PLAID_ENV?: string;
+  PLAID_TOKEN_KEY?: string;
 }
 interface Member {
   owner_id: string;
@@ -94,7 +99,9 @@ export function createHandler(dependencies: Dependencies = {}) {
         return json({ ownerId: member.owner_id, email: member.email, role: member.role });
       }
       if (request.method !== 'GET' && request.headers.get('Sec-Fetch-Site') === 'cross-site') throw new AccessError(403, 'access_denied');
-      const result = await route(request, { database, key: env.SUPABASE_SECRET_KEY, ownerId: member.owner_id, role: member.role, fetcher: dependencies.fetch ?? fetch });
+      const ctx = { database, key: env.SUPABASE_SECRET_KEY, ownerId: member.owner_id, role: member.role, fetcher: dependencies.fetch ?? fetch,
+        plaid: { clientId: env.PLAID_CLIENT_ID ?? '', secret: env.PLAID_SECRET ?? '', env: env.PLAID_ENV || 'sandbox', tokenKey: env.PLAID_TOKEN_KEY ?? '' } };
+      const result = path === '/api/plaid' || path.startsWith('/api/plaid/') ? await plaidRoute(request, ctx) : await route(request, ctx);
       return json(result);
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.code }, error.status);
