@@ -67,7 +67,8 @@ test('missing/unsafe configuration fails closed', async () => {
   }
 });
 test('all routes and methods require auth; no financial or public debug route', async () => {
-  for (const path of ['/api/accounts', '/health', '/', '/api/me']) assert.equal((await handler()(request(undefined, path), env)).status, 401);
-  assert.equal((await handler()(request(await token(), '/api/accounts'), env)).status, 404);
+  for (const path of ['/api/accounts', '/api/summary', '/health', '/', '/api/me']) assert.equal((await handler()(request(undefined, path), env)).status, 401);
+  assert.equal((await handler()(request(await token(), '/api/unknown'), env)).status, 404);
+  assert.equal((await handler()(request(await token(), '/health'), env)).status, 404);
   assert.equal((await handler()(request(await token(), '/api/me', 'POST'), env)).status, 405);
 });

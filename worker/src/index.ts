@@ -1,3 +1,4 @@
+import { route, HttpError } from './ledger';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export interface Env {
@@ -87,10 +88,16 @@ export function createHandler(dependencies: Dependencies = {}) {
         throw new AccessError(403, 'access_denied');
       }
       // Owner identity is resolved exclusively on the server, never from request parameters.
-      if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
-      if (new URL(request.url).pathname !== '/api/me') return json({ error: 'not_found' }, 404);
-      return json({ ownerId: member.owner_id, email: member.email, role: member.role });
+      const path = new URL(request.url).pathname;
+      if (path === '/api/me') {
+        if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
+        return json({ ownerId: member.owner_id, email: member.email, role: member.role });
+      }
+      if (request.method !== 'GET' && request.headers.get('Sec-Fetch-Site') === 'cross-site') throw new AccessError(403, 'access_denied');
+      const result = await route(request, { database, key: env.SUPABASE_SECRET_KEY, ownerId: member.owner_id, role: member.role, fetcher: dependencies.fetch ?? fetch });
+      return json(result);
     } catch (error) {
+      if (error instanceof HttpError) return json({ error: error.code }, error.status);
       return error instanceof AccessError
         ? json({ error: error.code }, error.status)
         : json({ error: 'service_unavailable' }, 503);
