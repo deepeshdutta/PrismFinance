@@ -68,3 +68,12 @@ test('ledger SQL: owner-keyed, cascades, closed to browser roles', async () => {
   await db.exec(`delete from prism_members where owner_id='${o}'`);
   assert.equal((await db.query("select 1 from pf_accounts")).rows.length, 0);
 });
+
+test('fetch is never invoked with the context object as `this` (Workers: Illegal invocation)', async () => {
+  const c: any = ctx(A, 'owner');
+  c.fetcher = function (this: unknown) {
+    if (this === c) throw new TypeError('Illegal invocation');
+    return new Response('[]', { status: 200 });
+  };
+  await route(req('GET', '/api/accounts'), c);
+});
