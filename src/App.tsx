@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
 import { AllocationChart, TrendChart } from "./charts";
 import {
@@ -132,21 +132,6 @@ function Brand() {
       <p className="font-display text-xl leading-none tracking-tight">PrismFinance</p>
       <p className="mt-1 text-xs tracking-wide text-muted uppercase">Net worth</p>
     </Link>
-  );
-}
-
-function Welcome() {
-  return (
-    <section className="pt-6">
-      <p className="text-xs tracking-wide text-muted uppercase">For a small circle</p>
-      <h1 className="mt-2 font-display text-4xl leading-tight tracking-tight">What you own, what you owe, on one screen.</h1>
-      <p className="mt-4 max-w-md text-sm text-muted">
-        Each person signs in and sees only their own numbers. Built for about five people.
-      </p>
-      <Link to="/books" className="btn mt-6">
-        Open your books
-      </Link>
-    </section>
   );
 }
 
@@ -537,7 +522,39 @@ function TxnForm({
   );
 }
 
-function Login({ next = "/books" }: { next?: string }) {
+type GateState = "checking" | "allowed" | "denied" | "setup";
+
+function useAllowlist(user: User | null): GateState {
+  const [state, setState] = useState<GateState>("checking");
+  useEffect(() => {
+    if (!user?.email) {
+      setState("checking");
+      return;
+    }
+    let live = true;
+    const email = user.email.toLowerCase();
+    void (async () => {
+      const { data, error } = await supabase
+        .from("prism_allowlist")
+        .select("email")
+        .eq("email", email)
+        .maybeSingle();
+      if (!live) return;
+      if (error) {
+        // 42P01: table missing — the owner hasn't run supabase/allowlist.sql yet.
+        setState(error.code === "42P01" ? "setup" : "denied");
+        return;
+      }
+      setState(data ? "allowed" : "denied");
+    })();
+    return () => {
+      live = false;
+    };
+  }, [user]);
+  return state;
+}
+
+function LoginScreen() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -553,7 +570,7 @@ function Login({ next = "/books" }: { next?: string }) {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: "https://deepeshdutta.github.io/PrismFinance/books",
+        emailRedirectTo: `${window.location.origin}/PrismFinance/books`,
       },
     });
     setPending(false);
@@ -578,118 +595,172 @@ function Login({ next = "/books" }: { next?: string }) {
       setError(verifyError.message);
       return;
     }
-    await navigate(next);
+    await navigate("/");
   }
 
   return (
-    <section className="mx-auto w-full max-w-md pt-4">
-      <p className="text-xs tracking-wide text-muted uppercase">One-time code</p>
-      <h1 className="mt-2 font-display text-3xl tracking-tight">Confirm your email</h1>
-      <p className="mt-2 text-sm text-muted">No password. We’ll email a one-time code. Enter it here to open your books.</p>
-      {sent ? (
-        <form onSubmit={confirmCode} className="mt-6 space-y-3">
-          <input className="field" type="email" value={email} readOnly />
-          <input
-            className="field"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="Code from the email"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            required
-          />
-          {error ? <p className="text-sm text-clay">{error}</p> : null}
-          <button className="btn w-full" type="submit" disabled={pending}>
-            {pending ? "Checking…" : "Confirm code"}
-          </button>
-          <button type="button" className="text-sm text-muted" onClick={() => setSent(false)}>
-            Use a different email
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={sendCode} className="mt-6 space-y-3">
-          <input
-            className="field"
-            type="email"
-            autoComplete="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          {error ? <p className="text-sm text-clay">{error}</p> : null}
-          <button className="btn w-full" type="submit" disabled={pending}>
-            {pending ? "Sending…" : "Email me a code"}
-          </button>
-        </form>
-      )}
-    </section>
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 text-ink">
+      <section className="w-full max-w-md rounded-card border border-line bg-card p-6">
+        <p className="font-display text-2xl tracking-tight">PrismFinance</p>
+        <p className="mt-1 text-xs tracking-wide text-muted uppercase">Private circle · sign in</p>
+        <h1 className="mt-5 font-display text-3xl tracking-tight">One-time code</h1>
+        <p className="mt-2 text-sm text-muted">
+          No password. Enter your email and we’ll send a one-time code. Only preapproved emails can get in.
+        </p>
+        {sent ? (
+          <form onSubmit={confirmCode} className="mt-6 space-y-3">
+            <input className="field" type="email" value={email} readOnly />
+            <input
+              className="field"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="Code from the email"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+            />
+            {error ? <p className="text-sm text-clay">{error}</p> : null}
+            <button className="btn w-full" type="submit" disabled={pending}>
+              {pending ? "Checking…" : "Confirm code"}
+            </button>
+            <button type="button" className="text-sm text-muted" onClick={() => setSent(false)}>
+              Use a different email
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={sendCode} className="mt-6 space-y-3">
+            <input
+              className="field"
+              type="email"
+              autoComplete="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            {error ? <p className="text-sm text-clay">{error}</p> : null}
+            <button className="btn w-full" type="submit" disabled={pending}>
+              {pending ? "Sending…" : "Email me a code"}
+            </button>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Puppy() {
+  return (
+    <svg viewBox="0 0 120 120" className="mx-auto h-28 w-28" role="img" aria-label="A friendly puppy guarding the door">
+      <ellipse cx="32" cy="52" rx="14" ry="22" fill="#8a5a3b" transform="rotate(-18 32 52)" />
+      <ellipse cx="88" cy="52" rx="14" ry="22" fill="#8a5a3b" transform="rotate(18 88 52)" />
+      <circle cx="60" cy="62" r="34" fill="#c99a6b" />
+      <ellipse cx="60" cy="80" rx="16" ry="12" fill="#efdcc2" />
+      <circle cx="48" cy="56" r="5" fill="#2b2118" />
+      <circle cx="72" cy="56" r="5" fill="#2b2118" />
+      <circle cx="49.5" cy="54.5" r="1.6" fill="#ffffff" />
+      <circle cx="73.5" cy="54.5" r="1.6" fill="#ffffff" />
+      <ellipse cx="60" cy="74" rx="6" ry="4.6" fill="#2b2118" />
+      <path d="M60 79 q0 6 -8 7 M60 79 q0 6 8 7" stroke="#2b2118" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+      <rect x="56" y="84" width="8" height="10" rx="4" fill="#e0787f" />
+      <circle cx="42" cy="70" r="4" fill="#e0787f" opacity="0.45" />
+      <circle cx="78" cy="70" r="4" fill="#e0787f" opacity="0.45" />
+    </svg>
+  );
+}
+
+function DeniedPuppy({ email }: { email: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 text-ink">
+      <section className="w-full max-w-md rounded-card border border-line bg-card p-6 text-center">
+        <Puppy />
+        <h1 className="mt-4 font-display text-3xl tracking-tight">This circle is private</h1>
+        <p className="mt-2 text-sm text-muted">
+          {email} isn’t on the guest list, so there’s nothing to show. This pup is guarding the door.
+        </p>
+        <p className="mt-2 text-sm text-muted">If you should have access, ask the owner to add your email.</p>
+        <button type="button" className="btn mt-6 w-full" onClick={() => void supabase.auth.signOut()}>
+          Sign out
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function SetupHint() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4 text-ink">
+      <section className="w-full max-w-md rounded-card border border-line bg-card p-6">
+        <h1 className="font-display text-2xl tracking-tight">Almost there</h1>
+        <p className="mt-2 text-sm text-muted">
+          The sign-in allowlist isn’t set up yet. Run <code>supabase/allowlist.sql</code> once in the Supabase SQL
+          editor, then sign in again.
+        </p>
+        <button type="button" className="btn-ghost mt-4" onClick={() => void supabase.auth.signOut()}>
+          Sign out
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function AuthedApp({ user }: { user: User }) {
+  const gate = useAllowlist(user);
+  const books = useBooks(true);
+  const [editing, setEditing] = useState<AccountRow | null>(null);
+  if (gate === "checking") return <p className="p-6 text-sm text-muted">Checking access…</p>;
+  if (gate === "setup") return <SetupHint />;
+  if (gate === "denied") return <DeniedPuppy email={user.email ?? "This email"} />;
+  return (
+    <Shell user={user}>
+      <Routes>
+        <Route path="/" element={<Overview books={books} />} />
+        <Route
+          path="/investments"
+          element={
+            <Holding
+              title="Investments"
+              blurb="Brokerage, retirement, and property."
+              rows={(books.data?.accounts ?? []).filter(
+                (row) => row.kind === "asset" && (INVESTMENT_TYPES as readonly string[]).includes(row.accountType),
+              )}
+              onOpen={setEditing}
+            />
+          }
+        />
+        <Route
+          path="/loans"
+          element={
+            <Holding
+              title="Loans"
+              blurb="Mortgage, student, auto, and cards."
+              rows={(books.data?.accounts ?? []).filter(
+                (row) => row.kind === "liability" && (LOAN_TYPES as readonly string[]).includes(row.accountType),
+              )}
+              onOpen={setEditing}
+            />
+          }
+        />
+        <Route path="/cash" element={<Cash books={books} />} />
+        <Route path="/books" element={<Books books={books} />} />
+      </Routes>
+      {editing ? (
+        <AccountForm
+          seed={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void books.reload();
+          }}
+        />
+      ) : null}
+    </Shell>
   );
 }
 
 export default function App() {
   const { user, ready } = useSession();
-  const location = useLocation();
-  const books = useBooks(Boolean(user));
-  const [editing, setEditing] = useState<AccountRow | null>(null);
-  const needsCode = !user && (location.pathname === "/books" || location.pathname === "/login");
   if (!ready) return <p className="p-6 text-sm text-muted">Loading…</p>;
-  return (
-    <Routes>
-      <Route
-        path="*"
-        element={
-          <Shell user={user}>
-            {needsCode ? (
-              <Login next="/books" />
-            ) : !user ? (
-              <Welcome />
-            ) : (
-              <Routes>
-                <Route path="/" element={<Overview books={books} />} />
-                <Route
-                  path="/investments"
-                  element={
-                    <Holding
-                      title="Investments"
-                      blurb="Brokerage, retirement, and property."
-                      rows={(books.data?.accounts ?? []).filter(
-                        (row) => row.kind === "asset" && (INVESTMENT_TYPES as readonly string[]).includes(row.accountType),
-                      )}
-                      onOpen={setEditing}
-                    />
-                  }
-                />
-                <Route
-                  path="/loans"
-                  element={
-                    <Holding
-                      title="Loans"
-                      blurb="Mortgage, student, auto, and cards."
-                      rows={(books.data?.accounts ?? []).filter(
-                        (row) => row.kind === "liability" && (LOAN_TYPES as readonly string[]).includes(row.accountType),
-                      )}
-                      onOpen={setEditing}
-                    />
-                  }
-                />
-                <Route path="/cash" element={<Cash books={books} />} />
-                <Route path="/books" element={<Books books={books} />} />
-              </Routes>
-            )}
-            {editing ? (
-              <AccountForm
-                seed={editing}
-                onClose={() => setEditing(null)}
-                onSaved={() => {
-                  setEditing(null);
-                  void books.reload();
-                }}
-              />
-            ) : null}
-          </Shell>
-        }
-      />
-    </Routes>
-  );
+  if (!user) return <LoginScreen />;
+  return <AuthedApp user={user} />;
 }
