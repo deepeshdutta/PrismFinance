@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PrismFinance — Markets</title><meta name="robots" content="noindex">
+<style>:root{--bg:#070d18;--panel:#0d1626;--line:#1c2a42;--text:#e7edf7;--muted:#8393ad;--blue:#4f9cf0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 'Segoe UI',system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:22px 16px}h1{margin:0 0 4px;font-size:22px}.sub{color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:16px}h3{margin:0 0 6px;font-size:15px}
+a.btn{display:inline-block;margin-top:12px;background:var(--blue);color:#06101f;font-weight:700;text-decoration:none;border-radius:10px;padding:10px 16px}</style></head>
+<body><div class="wrap"><h1>Markets</h1><div class="sub">Generic NASDAQ prices. Sign in to see the day change on your own holdings.</div>
+<div class="card" id="movers"><p class="sub">Loading…</p></div>
+<div class="card"><h3>Your portfolio</h3><p class="sub">Approved members see their own accounts and holdings here. Nothing personal is shown on this page.</p><a class="btn" href="/PrismFinance/">Sign in</a></div>
+<p class="sub" style="margin-top:14px">Prices come from a market-data feed and can be delayed. This is not investment advice.</p></div>
+<script>/*TICKER*/</script>
+<script>setInterval(()=>{const d=window.PrismTicker&&window.PrismTicker.data;if(d)document.getElementById('movers').innerHTML=window.PrismTicker.moversHtml(d)},1500)</script>
+</body></html>
