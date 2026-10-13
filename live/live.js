@@ -269,6 +269,9 @@
     const status = pnl.dataStatus === 'live' ? '<span class="tag ok">Live</span>' : pnl.dataStatus === 'partial' ? '<span class="tag warn">Partial</span>' : `<span class="tag">${esc(pnl.dataStatus || '—')}</span>`;
     const rt = Number(r.total) || 0, ut = Number(u.total) || 0;
     const k = (l, v, d, cls) => `<div class="card kpi"><div class="l">${l}</div><div class="v num ${cls || ''}">${v}</div><div class="d">${d}</div></div>`;
+    // DISC-1: commission is NOT netted into P&L (gross everywhere); shown as a
+    // separate, clearly labeled estimate line item (user decision 2026-10-14).
+    const ce = pnl.commissionEstimate || {};
     const cum = []; let c = 0;
     byMonth.forEach((m) => { c += Number(m.total) || 0; cum.push(c); });
     return chips + `
@@ -278,6 +281,7 @@
         ${k('Unrealized P&L', usd(ut, 2), `Delayed marks · as of ${esc(String(u.asOf || '').slice(0, 10))}${u.priceSource ? ' · ' + esc(u.priceSource) : ''}`, ut >= 0 ? 'up' : 'down')}
         ${k('Dividends', usd(Number(pnl.dividends) || 0, 2), 'Cash dividends received')}
         ${k('Fees', usd(-Math.abs(Number(pnl.fees) || 0), 2), 'Brokerage fees paid', 'down')}
+        ${k('Est. commission', usd(-Math.abs(Number(ce.estimateUsd) || 0), 2), `${Number(ce.trades) || 0} trades × $0.01 — estimate only, not netted in P&L`, 'down')}
       </div>
       <div class="grid g2" style="margin-top:14px">
         <div class="card"><h3>Monthly realized P&amp;L</h3><div class="hint">Stocks vs options per month</div>${byMonth.length ? pnlBars(byMonth) : '<p class="sub">No monthly data for this period.</p>'}</div>

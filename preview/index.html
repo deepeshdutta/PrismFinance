@@ -249,10 +249,15 @@ $('#loginForm').addEventListener('submit',e=>{e.preventDefault();
     if(!em.includes('ok')){show('login',false);show('denied',true);return}
     $('#codeRow').style.display='block';$('#loginBtn').textContent='Verify code';$('#cd').focus();return}
   show('login',false);$('#codeRow').style.display='none';$('#loginBtn').textContent='Send code';$('#cd').value=''});
-// user module (single /app-session/me fetch)
-(function(){const APP_ID=location.pathname.split('/')[2]||'';const el=$('#museUser');
-  fetch('/app-session/me?app_id='+APP_ID).then(r=>r.ok?r.json():null).then(u=>{if(u){$('#museUserNickname').textContent=u.nickname||u.email.split('@')[0];el.style.display='flex';const s=document.querySelector('.muse-badge span');if(s)s.style.display='none'}}).catch(()=>{});
-  $('#museLogout').addEventListener('click',()=>fetch('/app-session/logout?app_id='+APP_ID,{method:'POST'}).then(()=>location.reload()))})();
+// user module: identity from /api/me; logout via Cloudflare Access.
+// BUG-1: the old /app-session/* endpoints never existed on this worker (404);
+// the correct logout for an Access-protected app is the app domain's
+// /cdn-cgi/access/logout, served by Cloudflare's edge (docs: Cloudflare One
+// Identity FAQ — "How do end users log out of an application protected by
+// Access?"). Relative URL keeps it correct on every deployment.
+(function(){const el=$('#museUser');
+  fetch('/api/me').then(r=>r.ok?r.json():null).then(u=>{if(u&&u.email){$('#museUserNickname').textContent=u.email.split('@')[0];el.style.display='flex';const s=document.querySelector('.muse-badge span');if(s)s.style.display='none'}}).catch(()=>{});
+  $('#museLogout').addEventListener('click',()=>{location.href='/cdn-cgi/access/logout'})})();
 </script>
 </body>
 </html>

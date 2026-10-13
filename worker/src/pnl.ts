@@ -18,6 +18,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r1 = (n: number) => Math.round(n * 10) / 10;
+/**
+ * Estimated commission per trade, USD. P&L figures are GROSS of commissions
+ * everywhere (user decision 2026-10-14: the majority of commissions are
+ * ~$0.01/trade, so netting them into P&L adds noise, not signal). The P&L
+ * screen shows a separate "N trades · est. commission ≈ $X" line item computed
+ * as tradeCount × COMMISSION_PER_TRADE_ESTIMATE, always labeled an estimate.
+ */
+export const COMMISSION_PER_TRADE_ESTIMATE = 0.01;
 
 // ---------- exported types ----------
 export type OptionAction = 'SHORT_OPEN' | 'SHORT_CLOSE' | 'LONG_OPEN' | 'LONG_CLOSE' | 'EXPIRE' | 'ASSIGN' | 'UNKNOWN';
@@ -234,7 +242,10 @@ export function groupOptionLegs(
     }
     // Cash-secured status of puts is NOT derivable from Plaid rows alone — the
     // collateral label is applied only where cash data is available (see computeCollateral).
-    const pnl = r2(premiumIn - premiumOut - fees);
+    // P&L is gross of commissions (user decision 2026-10-14): fees remain visible
+    // on the group (highCostPct flag, collateral methodology) but are never
+    // netted into any P&L figure. See COMMISSION_PER_TRADE_ESTIMATE.
+    const pnl = r2(premiumIn - premiumOut);
     out.push({
       key, accountId: sorted[0]?.accountId ?? '', underlying: normalizeUnderlying(sorted[0]?.underlying ?? ''),
       contractType: sorted[0]?.contractType ?? 'put', expiry: sorted[0]?.expiry ?? '', strike: sorted[0]?.strike ?? 0,
@@ -396,8 +407,14 @@ export function detectRolls(groups: OptionGroup[]): { rolls: Roll[]; links: Map<
     }
     if (!best) continue;
     paired.add(o.g.key);
-    const closingDebit = r2(best.g.shortCloses.reduce((a, l) => a + l.cash, 0));
-    const openingCredit = r2(o.g.shortOpens.reduce((a, l) => a + l.cash, 0));
+    // BUG-5 pairing method (documented): a roll pairs one CLOSE EVENT with one
+    // OPEN EVENT — same account/underlying/contract-type, close 0–2 days before
+    // the open, latest such close wins. closingDebit sums only the close legs
+    // posted on the paired close date (not every close the group ever had);
+    // openingCredit sums only the open legs posted on the paired open date.
+    // Partial rolls therefore report the paired legs' cash, not group totals.
+    const closingDebit = r2(best.g.shortCloses.filter((l) => l.postedOn === best!.date).reduce((a, l) => a + l.cash, 0));
+    const openingCredit = r2(o.g.shortOpens.filter((l) => l.postedOn === o.date).reduce((a, l) => a + l.cash, 0));
     rolls.push({
       id: `roll:${o.date}:${best.g.key}>>${o.g.key}`,
       accountId: o.g.accountId, underlying: o.g.underlying, contractType: o.g.contractType,
@@ -590,7 +607,8 @@ export interface CollateralMetrics {
  *   (see cashMethod): unsettled cash, encumbrances and margin effects are not excluded.
  * - idleCash = max(0, cashAvailable − totalRequired).
  * - utilizationPct = totalRequired / cashAvailable × 100 (null when no cash).
- * - netPremium = Σ (premiumCollected − premiumPaid − fees) over open puts,
+ * - netPremium = Σ (premiumCollected − premiumPaid) over open puts,
+ *   gross of commissions (user decision 2026-10-14),
  *   open covered calls and groups completed inside the queried window.
  * - returnOnCollateralPct = netPremium / totalRequired × 100; denominator is shown.
  * - daysCommitted = required-collateral-weighted average days since openedOn (open puts).
@@ -620,7 +638,7 @@ export function computeCollateral(input: CollateralInput): CollateralMetrics {
   const totalRequired = r2(puts.reduce((a, p) => a + p.required, 0));
   const idleCash = r2(Math.max(0, cashAvailable - totalRequired));
   const utilizationPct = cashAvailable > 0 ? r1((totalRequired / cashAvailable) * 100) : null;
-  const netOf = (g: OptionGroup) => g.premiumCollected - g.premiumPaid - g.fees;
+  const netOf = (g: OptionGroup) => g.premiumCollected - g.premiumPaid; // gross of commissions (user decision 2026-10-14)
   const netPremium = r2([...input.openPuts, ...input.coveredCalls, ...input.closedGroups].reduce((a, g) => a + netOf(g), 0));
   const returnOnCollateralPct = totalRequired > 0 ? r2((netPremium / totalRequired) * 100) : null;
   const today = new Date(input.now ?? Date.now()).toISOString().slice(0, 10);
@@ -653,7 +671,7 @@ export function computeCollateral(input: CollateralInput): CollateralMetrics {
     cashMethod: 'estimate: Σ account balances − Σ holding market values. Unsettled cash, encumbered margin and pending settlements are not excluded — approximation only.',
     cashEstimate: true,
     idleCash, utilizationPct, netPremium,
-    netPremiumNote: 'Σ (premiumCollected − premiumPaid − fees) over open short puts, open covered calls and groups completed inside the queried window.',
+    netPremiumNote: 'Σ (premiumCollected − premiumPaid), gross of commissions, over open short puts, open covered calls and groups completed inside the queried window.',
     returnOnCollateralPct, collateralDenominator: totalRequired,
     denominatorNote: 'totalRequired = Σ strike×100×open contracts across open short puts.',
     daysCommitted, daysNote: 'Required-collateral-weighted average days since openedOn for open short puts.',
@@ -762,6 +780,18 @@ function dateParam(url: URL, name: string, def: string): string {
   if (!DATE.test(v) || Number.isNaN(Date.parse(v))) throw new HttpError(400, 'invalid_date');
   return v;
 }
+/**
+ * BUG-2: an omitted `from` (the UI's "All" chip) resolves to the earliest
+ * available transaction date — unbounded history — not the 12-month default.
+ * An explicit `from` is validated as before.
+ */
+function resolveFrom(url: URL, rows: { posted_on: string }[], to: string): string {
+  const d = new Date(`${to}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 12);
+  const dflt = d.toISOString().slice(0, 10);
+  if (url.searchParams.get('from')) return dateParam(url, 'from', dflt);
+  const earliest = rows.reduce((m, r) => (r.posted_on && r.posted_on < m ? r.posted_on : m), to);
+  return earliest < dflt ? earliest : dflt;
+}
 interface InvRow {
   account_id: string; security_id: string | null; posted_on: string; txn_type: string; subtype: string | null;
   name: string | null; quantity: number | null; amount: number | null; fees: number | null; ticker: string | null;
@@ -837,13 +867,15 @@ const SYNC_NOTE = 'Investment-transaction sync is a separate PR (needs Plaid Pro
 export async function pnlSummary(ctx: Ctx, url: URL, now = Date.now()) {
   const accountId = accountScope(url);
   const to = dateParam(url, 'to', new Date(now).toISOString().slice(0, 10));
-  const dflt = new Date(`${to}T00:00:00Z`); dflt.setUTCMonth(dflt.getUTCMonth() - 12);
-  const from = dateParam(url, 'from', dflt.toISOString().slice(0, 10));
-  if (from > to) throw new HttpError(400, 'invalid_date');
   const accounts = await loadAccounts(ctx, accountId);
   if (accountId && !accounts.length) throw new HttpError(404, 'not_found');
   const [rows, holdings] = await Promise.all([allInvestmentRows(ctx, accountId), loadHoldings(ctx, accountId)]);
+  const from = resolveFrom(url, rows, to);
+  if (from > to) throw new HttpError(400, 'invalid_date');
   const inRange = rows.filter((r) => r.posted_on >= from && r.posted_on <= to);
+  // DISC-1: commission estimate line item (user decision 2026-10-14). P&L is
+  // gross of commissions; this is a separate, clearly labeled estimate.
+  const tradeCount = inRange.filter((r) => r.txn_type === 'buy' || r.txn_type === 'sell').length;
   const equityLegs = rows.map(toEquityLeg).filter(notNull);
   const optLegs = rows.map(toOptionLeg).filter(notNull);
   const groups = groupOptionLegs(optLegs, makeSharesFn(holdings), equityLegs, now);
@@ -908,6 +940,11 @@ export async function pnlSummary(ctx: Ctx, url: URL, now = Date.now()) {
       note: 'Broker holdings marks are delayed quotes, not live prices.',
     },
     dividends: r2(dividends), fees: r2(fees),
+    commissionEstimate: {
+      trades: tradeCount, perTradeUsd: COMMISSION_PER_TRADE_ESTIMATE,
+      estimateUsd: r2(tradeCount * COMMISSION_PER_TRADE_ESTIMATE),
+      note: 'Estimate only: trades × $0.01 per trade. All P&L figures are gross of commissions.',
+    },
     collateral,
     dataStatus, note: SYNC_NOTE,
   };
@@ -954,6 +991,10 @@ export async function openOptions(ctx: Ctx, url: URL, now = Date.now()) {
         ? { price: r2(um.price), source: 'delayed', asOf: um.asOf }
         : { price: null, source: 'unavailable', asOf: null };
       const cashInfo = cashByAcct.get(g.accountId);
+      // BUG-4: expired_inferred positions stay listed (state visible) but ALL
+      // action flags are suppressed — a "review close" flag on a likely-dead
+      // position misleads.
+      const dead = g.outcome === 'expired_inferred';
       const risk = evaluateRiskFlags({
         group: g, markAsOf: mark?.asOf ?? null, markSource: mark ? 'delayed' : 'unavailable',
         underlying: underlyingPrice, cashAvailable: cashInfo && cashInfo.hasBalance ? cashInfo.cash : null, now,
@@ -965,19 +1006,21 @@ export async function openOptions(ctx: Ctx, url: URL, now = Date.now()) {
         premiumReceived, costToClose, costToClosePerContract, pctCaptured, dte,
         markAsOf: mark?.asOf ?? null, markSource: (mark ? 'delayed' : 'unavailable') as 'delayed' | 'unavailable',
         flags: {
-          captured75: pctCaptured != null && pctCaptured >= 75,
-          fastFlip: pctCaptured != null && pctCaptured > 50 && ageDays != null && ageDays <= 2,
-          cheapClose: dte <= 2 && costToClosePerContract != null && costToClosePerContract <= 0.01,
+          captured75: !dead && pctCaptured != null && pctCaptured >= 75,
+          fastFlip: !dead && pctCaptured != null && pctCaptured > 50 && ageDays != null && ageDays <= 2,
+          cheapClose: !dead && dte <= 2 && costToClosePerContract != null && costToClosePerContract <= 0.01,
         },
         premium,
-        riskFlags: risk.flags,
+        riskFlags: dead
+          ? { deepItm: false, nearStrike: false, insufficientCash: false, quoteStale: false, highCostPct: false }
+          : risk.flags,
         riskNotes: risk.notes,
         evaluatedAt: risk.evaluatedAt,
         quote: risk.quote,
         underlyingPrice,
         coverage: g.coverage,
         note: g.outcome === 'expired_inferred'
-          ? 'Expiry passed with no terminal marker; likely expired but unconfirmed.'
+          ? 'Expiry passed with no terminal marker; likely expired but unconfirmed. Action flags suppressed.'
           : g.kind === 'long_option' ? 'Long option: cost-to-close and % captured are not applicable.' : null,
       };
     })
@@ -1056,13 +1099,13 @@ export async function optionsHistory(ctx: Ctx, url: URL, now = Date.now()) {
 export async function pnlSeries(ctx: Ctx, url: URL, now = Date.now()) {
   const accountId = accountScope(url);
   const to = dateParam(url, 'to', new Date(now).toISOString().slice(0, 10));
-  const dflt = new Date(`${to}T00:00:00Z`); dflt.setUTCMonth(dflt.getUTCMonth() - 12);
-  const from = dateParam(url, 'from', dflt.toISOString().slice(0, 10));
-  if (from > to) throw new HttpError(400, 'invalid_date');
-  if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw new HttpError(400, 'range_too_large');
   const accounts = await loadAccounts(ctx, accountId);
   if (accountId && !accounts.length) throw new HttpError(404, 'not_found');
   const [rows, holdings] = await Promise.all([allInvestmentRows(ctx, accountId), loadHoldings(ctx, accountId)]);
+  // BUG-3: arbitrary from/to ranges allowed (BRS INV-02 2Y/3Y/All). Realized
+  // computes over the full range; unrealized keeps honest null gaps (AC-10).
+  const from = resolveFrom(url, rows, to);
+  if (from > to) throw new HttpError(400, 'invalid_date');
   const equityLegs = rows.map(toEquityLeg).filter(notNull);
   const fifo = fifoEquity(equityLegs);
   const groups = groupOptionLegs(rows.map(toOptionLeg).filter(notNull), makeSharesFn(holdings), equityLegs, now);
