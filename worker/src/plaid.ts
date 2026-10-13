@@ -1,5 +1,5 @@
 // Plaid connectivity. Every query is scoped to the verified owner; access tokens never leave the Worker.
-import { HttpError, type Ctx, db } from './ledger';
+import { HttpError, type Ctx, db, transactionFingerprint, startImportBatch, finishImportBatch, existingProviderIds } from './ledger';
 
 export interface PlaidConfig { clientId: string; secret: string; env: string; tokenKey: string; }
 const BASES: Record<string, string> = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
@@ -35,7 +35,13 @@ async function call(ctx: Ctx, path: string, payload: Record<string, unknown>) {
     res = await send(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: cfg.clientId, secret: cfg.secret, ...payload }), signal: AbortSignal.timeout(15000) });
   } catch { throw new HttpError(502, 'plaid_unreachable'); }
-  if (!res.ok) throw new HttpError(502, 'plaid_error');
+  if (!res.ok) {
+    let plaidCode: string | null = null;
+    try { const j: any = await res.json(); if (j && typeof j.error_code === 'string') plaidCode = j.error_code; } catch { /* not JSON */ }
+    const err = new HttpError(502, 'plaid_error') as HttpError & { plaidCode?: string | null };
+    err.plaidCode = plaidCode;
+    throw err;
+  }
   return res.json() as Promise<any>;
 }
 function configured(ctx: Ctx) {
@@ -67,11 +73,11 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const owned = (ctx: Ctx) => ({ owner_id: `eq.${ctx.ownerId}` });
 
 // ---- sync one item ----
-async function syncItem(ctx: Ctx, item: any) {
+async function syncItem(ctx: Ctx, item: any, batchId: string) {
   const accessToken = await decrypt(item.access_token_enc, ctx.plaid!.tokenKey);
   let cursor: string | null = item.sync_cursor ?? null;
   const first = cursor;
-  let added = 0, modified = 0, removed = 0;
+  let added = 0, modified = 0, removed = 0, inserted = 0, skipped = 0;
   const accountIds = new Map<string, string>(); // plaid_account_id -> our uuid
   for (let page = 0; page < 30; page++) {
     const data = await call(ctx, '/transactions/sync', { access_token: accessToken, ...(cursor ? { cursor } : {}), count: 500 });
@@ -90,12 +96,24 @@ async function syncItem(ctx: Ctx, item: any) {
     const toRow = (t: any) => {
       const acct = accountIds.get(String(t.account_id));
       if (!acct || t.pending) return null;
-      return { owner_id: ctx.ownerId, account_id: acct, plaid_transaction_id: String(t.transaction_id), posted_on: String(t.date),
-        description: String(t.merchant_name || t.name || 'Transaction').trim().slice(0, 200) || 'Transaction',
-        amount: round2(-Number(t.amount)), category: mapCategory(t) };
+      const description = String(t.merchant_name || t.name || 'Transaction').trim().slice(0, 200) || 'Transaction';
+      const amount = round2(-Number(t.amount));
+      const postedOn = String(t.date);
+      return { owner_id: ctx.ownerId, account_id: acct,
+        plaid_transaction_id: String(t.transaction_id), provider_transaction_id: String(t.transaction_id),
+        fingerprint: transactionFingerprint(ctx.ownerId, acct, postedOn, description, amount),
+        batch_id: batchId, posted_on: postedOn, description, amount, category: mapCategory(t) };
     };
-    const upserts = [...(data.added ?? []), ...(data.modified ?? [])].map(toRow).filter((r): r is NonNullable<ReturnType<typeof toRow>> => !!r && r.amount !== 0);
+    const valid = (r: any): r is NonNullable<ReturnType<typeof toRow>> => !!r && r.amount !== 0;
+    const addedRows = (data.added ?? []).map(toRow).filter(valid);
+    const modifiedRows = (data.modified ?? []).map(toRow).filter(valid);
+    // ING-03: skip 'added' rows we already hold (same owner + provider id). 'modified' rows upsert through.
+    const seen = addedRows.length ? await existingProviderIds(ctx, addedRows.map((r: any) => r.provider_transaction_id)) : new Set<string>();
+    const fresh = addedRows.filter((r: any) => !seen.has(r.provider_transaction_id));
+    skipped += addedRows.length - fresh.length;
+    const upserts = [...fresh, ...modifiedRows];
     for (const part of chunk(upserts)) await db(ctx, 'pf_transactions', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(part) }, { on_conflict: 'owner_id,plaid_transaction_id' });
+    inserted += fresh.length;
     const gone: string[] = (data.removed ?? []).map((r: any) => String(r.transaction_id));
     for (const part of chunk(gone, 100)) await db(ctx, 'pf_transactions', { method: 'DELETE' }, { ...owned(ctx), plaid_transaction_id: `in.(${part.map((x: string) => `"${x.replace(/"/g, '')}"`).join(',')})` });
     added += (data.added ?? []).length; modified += (data.modified ?? []).length; removed += gone.length;
@@ -103,13 +121,13 @@ async function syncItem(ctx: Ctx, item: any) {
     if (!data.has_more) break;
     if (page === 29) { cursor = first; throw new HttpError(502, 'plaid_error'); }
   }
-  const holdings = await syncHoldings(ctx, item, accessToken);
+  const holdings = await syncHoldings(ctx, item, accessToken, batchId);
   await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ sync_cursor: cursor, status: 'ok', last_synced_at: new Date().toISOString() }) }, { id: `eq.${item.id}`, ...owned(ctx) });
-  return { added, modified, removed, holdings };
+  return { added, modified, removed, holdings, inserted, skipped };
 }
 
 // ---- investment holdings (best effort: banks without investment accounts simply return nothing) ----
-async function syncHoldings(ctx: Ctx, item: any, accessToken: string) {
+async function syncHoldings(ctx: Ctx, item: any, accessToken: string, batchId: string) {
   let data: any;
   try { data = await call(ctx, '/investments/holdings/get', { access_token: accessToken }); } catch { return 0; }
   const started = new Date().toISOString();
@@ -126,6 +144,7 @@ async function syncHoldings(ctx: Ctx, item: any, accessToken: string) {
     if (!acct) return null;
     const qty = Number(h.quantity) || 0, price = Number(h.institution_price) || 0;
     return { owner_id: ctx.ownerId, account_id: acct, security_id: String(h.security_id),
+      provider_transaction_id: String(h.security_id), batch_id: batchId,
       ticker: sec.ticker_symbol ? String(sec.ticker_symbol).slice(0, 30) : null,
       name: String(sec.name ?? sec.ticker_symbol ?? 'Security').slice(0, 200), sec_type: sec.type ? String(sec.type).slice(0, 40) : null,
       quantity: qty, price, value: round2(Number(h.institution_value) || qty * price),
@@ -140,11 +159,24 @@ async function syncHoldings(ctx: Ctx, item: any, accessToken: string) {
 }
 async function syncAll(ctx: Ctx, only?: string) {
   const items = await db(ctx, 'pf_plaid_items', {}, { select: 'id,plaid_item_id,access_token_enc,institution_name,sync_cursor', ...owned(ctx), ...(only ? { id: `eq.${only}` } : {}) });
-  const total: { added: number; modified: number; removed: number; holdings: number; failed: number; reasons: string[] } = { added: 0, modified: 0, removed: 0, holdings: 0, failed: 0, reasons: [] };
+  const batchId = await startImportBatch(ctx, 'plaid');
+  const total: { added: number; modified: number; removed: number; holdings: number; inserted: number; skipped: number; failed: number; reasons: string[] } =
+    { added: 0, modified: 0, removed: 0, holdings: 0, inserted: 0, skipped: 0, failed: 0, reasons: [] };
   for (const item of items) {
-    try { const r = await syncItem(ctx, item); total.added += r.added; total.modified += r.modified; total.removed += r.removed; total.holdings += r.holdings; }
-    catch (e) { total.failed++; total.reasons.push(e instanceof HttpError ? `${e.status}:${e.message}` : `err:${(e as Error)?.name ?? 'unknown'}`); await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ status: 'error' }) }, { id: `eq.${item.id}`, ...owned(ctx) }).catch(() => {}); }
+    try {
+      const r = await syncItem(ctx, item, batchId);
+      total.added += r.added; total.modified += r.modified; total.removed += r.removed; total.holdings += r.holdings;
+      total.inserted += r.inserted; total.skipped += r.skipped;
+    } catch (e) {
+      total.failed++;
+      const code = (e as any)?.plaidCode;
+      const disconnected = typeof code === 'string' && code.startsWith('ITEM_');
+      total.reasons.push(`${(e as HttpError)?.status ?? 'err'}:${(e as Error)?.message ?? 'unknown'}${code ? `:${code}` : ''}`);
+      await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ status: disconnected ? 'disconnected' : 'error' }) }, { id: `eq.${item.id}`, ...owned(ctx) }).catch(() => {});
+    }
   }
+  const errText = total.failed ? `${total.failed} item(s) failed: ${total.reasons.join('; ').slice(0, 500)}` : null;
+  await finishImportBatch(ctx, batchId, total.inserted, total.skipped, errText).catch(() => {});
   return total;
 }
 

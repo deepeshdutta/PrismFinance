@@ -152,7 +152,7 @@ test('every database read for member data is scoped to the caller', async () => 
   const { call, log } = setup();
   for (const who of ['A', 'B'] as const) {
     log.length = 0;
-    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/plaid/items', '/api/ticker', '/api/options/calls']) await call(who, path);
+    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/health', '/api/plaid/items', '/api/ticker', '/api/options/calls']) await call(who, path);
     const want = `eq.${who === 'A' ? A : B}`;
     const data = log.filter((l) => l.table !== 'prism_members');
     assert.ok(data.length > 0);

@@ -39,6 +39,51 @@ function money(v: unknown): number {
 function requireWriter(ctx: Ctx) { if (ctx.role !== 'owner') throw new HttpError(403, 'read_only'); }
 const owned = (ctx: Ctx) => ({ owner_id: `eq.${ctx.ownerId}` });
 
+// ---- import provenance: stable fingerprints for dedup (ING-03) ----
+export function normalizeDescription(d: string): string {
+  return d.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+}
+function cyrb53(str: string, seed = 0): string {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
+}
+/** Stable dedup fingerprint: owner + account + date + normalized description + amount in cents. */
+export function transactionFingerprint(ownerId: string, accountId: string, postedOn: string, description: string, amount: number): string {
+  return cyrb53([ownerId, accountId, postedOn, normalizeDescription(description), String(Math.round(amount * 100))].join('|'));
+}
+
+// ---- import batches (ING-03 provenance, ING-04 quality) ----
+export type ImportSource = 'plaid' | 'api' | 'manual';
+export async function startImportBatch(ctx: Ctx, source: ImportSource): Promise<string> {
+  const rows = await db(ctx, 'pf_import_batches', { method: 'POST',
+    body: JSON.stringify({ owner_id: ctx.ownerId, source, started_at: new Date().toISOString() }) });
+  return rows[0]?.id ?? crypto.randomUUID();
+}
+export async function finishImportBatch(ctx: Ctx, batchId: string, added: number, skipped: number, error: string | null): Promise<void> {
+  await db(ctx, 'pf_import_batches', { method: 'PATCH',
+    body: JSON.stringify({ finished_at: new Date().toISOString(), added_count: added, skipped_count: skipped, error }) },
+    { id: `eq.${batchId}`, ...owned(ctx) });
+}
+const inList = (ids: string[]) => `in.(${ids.map((x) => `"${x.replace(/"/g, '')}"`).join(',')})`;
+/** Provider ids (e.g. Plaid transaction ids) already stored for this owner. Chunked for large syncs. */
+export async function existingProviderIds(ctx: Ctx, ids: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    if (!part.length) continue;
+    const rows = await db(ctx, 'pf_transactions', {}, { select: 'provider_transaction_id', ...owned(ctx), provider_transaction_id: inList(part) });
+    for (const r of rows) if (r.provider_transaction_id != null) found.add(String(r.provider_transaction_id));
+  }
+  return found;
+}
+
 export async function route(request: Request, ctx: Ctx): Promise<unknown> {
   const url = new URL(request.url);
   const parts = url.pathname.split('/').filter(Boolean); // ['api', ...]
@@ -99,10 +144,17 @@ export async function route(request: Request, ctx: Ctx): Promise<unknown> {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) throw new HttpError(400, 'invalid_body');
       const amount = money(b.amount);
       if (amount === 0) throw new HttpError(400, 'invalid_body');
-      const row = { owner_id: ctx.ownerId, account_id: accountId, posted_on: date, description: text(b.description, 200), amount, category: text(b.category, 60, false) };
+      const description = text(b.description, 200)!;
+      const fingerprint = transactionFingerprint(ctx.ownerId, accountId, date, description, amount);
+      const dup = await db(ctx, 'pf_transactions', {}, { select: 'id,account_id,posted_on,description,amount,category', ...owned(ctx), fingerprint: `eq.${fingerprint}`, limit: '1' });
+      if (dup.length) return { transaction: dup[0], duplicate: true };
+      const batchId = await startImportBatch(ctx, 'api');
       const mine = await db(ctx, 'pf_accounts', {}, { select: 'id', id: `eq.${accountId}`, ...owned(ctx), limit: '1' });
-      if (!mine.length) throw new HttpError(404, 'not_found');
+      if (!mine.length) { await finishImportBatch(ctx, batchId, 0, 0, 'account_not_found'); throw new HttpError(404, 'not_found'); }
+      const row = { owner_id: ctx.ownerId, account_id: accountId, posted_on: date, description, amount, category: text(b.category, 60, false),
+        provider_transaction_id: null, fingerprint, batch_id: batchId };
       const [created] = await db(ctx, 'pf_transactions', { method: 'POST', body: JSON.stringify(row) });
+      await finishImportBatch(ctx, batchId, 1, 0, null);
       return { transaction: created };
     }
     if (parts.length === 3 && id && UUID.test(id) && m === 'DELETE') {
@@ -126,11 +178,35 @@ export async function route(request: Request, ctx: Ctx): Promise<unknown> {
     if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
     return cashflow(ctx, url);
   }
-  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow', 'holdings'].includes(resource ?? '') ? 405 : 404,
-    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow', 'holdings'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
+  if (resource === 'health' && parts.length === 2) {
+    if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
+    return syncHealth(ctx);
+  }
+  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow', 'holdings', 'health'].includes(resource ?? '') ? 405 : 404,
+    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow', 'holdings', 'health'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
 }
 
 export const TRANSFER = 'transfer';
+// ---- sync health per connected item (ING-04). A feed with no successful sync in 24h is stale.
+const STALE_AFTER_MS = 24 * 3600 * 1000;
+async function syncHealth(ctx: Ctx) {
+  const items = await db(ctx, 'pf_plaid_items', {}, { select: 'id,institution_name,status,last_synced_at', ...owned(ctx), order: 'created_at.asc' });
+  const now = Date.now();
+  return {
+    checked_at: new Date(now).toISOString(),
+    items: items.map((it: any) => {
+      const last = it.last_synced_at ? Date.parse(it.last_synced_at) : NaN;
+      return {
+        id: it.id,
+        institution_name: it.institution_name,
+        status: it.status,
+        last_sync_at: it.last_synced_at ?? null,
+        stale: !Number.isFinite(last) || now - last > STALE_AFTER_MS,
+        disconnected: it.status === 'disconnected',
+      };
+    }),
+  };
+}
 async function cashflow(ctx: Ctx, url: URL) {
   const months = Math.min(Math.max(Number(url.searchParams.get('months')) || 6, 1), 24);
   const now = new Date();
