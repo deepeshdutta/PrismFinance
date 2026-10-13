@@ -182,8 +182,8 @@ export async function route(request: Request, ctx: Ctx): Promise<unknown> {
     if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
     return syncHealth(ctx);
   }
-  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow', 'holdings', 'health'].includes(resource ?? '') ? 405 : 404,
-    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow', 'holdings', 'health'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
+  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow', 'holdings', 'health', 'pnl', 'options'].includes(resource ?? '') ? 405 : 404,
+    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow', 'holdings', 'health', 'pnl', 'options'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
 }
 
 export const TRANSFER = 'transfer';

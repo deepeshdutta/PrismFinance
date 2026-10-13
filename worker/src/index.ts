@@ -2,6 +2,7 @@ import { route, HttpError } from './ledger';
 import { plaidRoute } from './plaid';
 import { memberQuotes } from './quotes';
 import { coveredCalls } from './options';
+import { pnlSummary, openOptions, optionsHistory, pnlSeries } from './pnl';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export interface Env {
@@ -110,6 +111,10 @@ export function createHandler(dependencies: Dependencies = {}) {
         market: { keyId: env.ALPACA_KEY_ID ?? '', secret: env.ALPACA_SECRET ?? '', tradierToken: env.TRADIER_TOKEN ?? '', tradierEnv: env.TRADIER_ENV || 'production' } };
       if (path === '/api/ticker') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await memberQuotes(ctx, ctx.market)); }
       if (path === '/api/options/calls') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await coveredCalls(ctx, ctx.market, new URL(request.url))); }
+      if (path === '/api/pnl') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await pnlSummary(ctx, new URL(request.url))); }
+      if (path === '/api/pnl/series') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await pnlSeries(ctx, new URL(request.url))); }
+      if (path === '/api/options/open') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await openOptions(ctx, new URL(request.url))); }
+      if (path === '/api/options/history') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await optionsHistory(ctx, new URL(request.url))); }
       const result = path === '/api/plaid' || path.startsWith('/api/plaid/') ? await plaidRoute(request, ctx) : await route(request, ctx);
       return json(result);
     } catch (error) {
