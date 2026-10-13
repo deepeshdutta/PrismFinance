@@ -135,6 +135,7 @@
     try { txns = (await api('/transactions?limit=200')).transactions; txErr = null; } catch (e) { txErr = e.message; }
     try { flow = await api('/cashflow?months=6'); flowErr = null; } catch (e) { flowErr = e.message; }
     paintMore();
+    await loadHoldings();
   }
   function paintMore() {
     const bk = document.getElementById('v-banking'), cf = document.getElementById('v-cashflow');
@@ -156,6 +157,30 @@
   }
   V.banking = bankingHtml; V.cashflow = cashflowHtml;
 
+
+
+  // ---------- Investments (holdings) ----------
+  let hold = null, holdErr = null;
+  const pct = (n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  function investmentsHtml() {
+    if (holdErr) return `<div class="card"><h3>Couldn't load holdings</h3><p class="sub">${esc(holdErr)}</p><button class="btn" data-retry>Try again</button></div>`;
+    if (!hold) return '<div class="card"><p class="sub">Loading…</p></div>';
+    if (!hold.holdings.length) return '<div class="card"><h3>No holdings yet</h3><p class="sub">Link a brokerage on the Accounts page and your positions appear here after the next sync. Only you can see them.</p><a class="btn" href="#accounts">Go to Accounts</a></div>';
+    const t = hold.totals, gl = t.gain, glp = t.costBasis ? (gl / t.costBasis) * 100 : null;
+    const card = (l, v, d) => `<div class="card kpi"><div class="l">${l}</div><div class="v num">${v}</div><div class="d">${d}</div></div>`;
+    const alloc = hold.allocation.map((a) => `<tr><td>${esc(a.type)}</td><td class="r num">${usd(a.value, 2)}</td><td class="r num">${t.value ? ((a.value / t.value) * 100).toFixed(1) : '0.0'}%</td></tr>`).join('');
+    const rows = hold.holdings.map((h) => { const g = h.cost_basis == null ? null : Number(h.value) - Number(h.cost_basis);
+      return `<tr><td><b>${esc(h.ticker || '—')}</b></td><td>${esc(h.name)}</td><td>${esc(acctName(h.account_id))}</td><td class="r num">${Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td><td class="r num">${usd(Number(h.price), 2)}</td><td class="r num">${usd(Number(h.value), 2)}</td><td class="r num ${g == null ? '' : g >= 0 ? 'up' : 'down'}">${g == null ? '—' : usd(g, 2)}</td></tr>`; }).join('');
+    return `<div class="grid g4">${card('Portfolio value', usd(t.value, 2), t.positions + ' position' + (t.positions === 1 ? '' : 's'))}${card('Cost basis', t.costBasis == null ? '—' : usd(t.costBasis, 2), 'As reported by your broker')}${card('Unrealized gain', gl == null ? '—' : usd(gl, 2), glp == null ? '' : pct(glp))}${card('Data freshness', 'Periodic', 'Synced from Plaid, not live ticks')}</div>
+      <div class="grid g2" style="margin-top:14px"><div class="card"><h3>Allocation</h3><table><tr><th>Type</th><th class="r">Value</th><th class="r">Share</th></tr>${alloc}</table></div>
+      <div class="card"><h3>About this data</h3><p class="sub">Prices and positions come from your broker through Plaid and refresh when you sync. Live streaming quotes are a later step.</p></div></div>
+      <div class="card" style="margin-top:14px"><h3>Positions</h3><div style="overflow-x:auto"><table><tr><th>Ticker</th><th>Name</th><th>Account</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Value</th><th class="r">Gain</th></tr>${rows}</table></div></div>`;
+  }
+  async function loadHoldings() {
+    try { hold = await api('/holdings'); holdErr = null; } catch (e) { holdErr = e.message; }
+    const iv = document.getElementById('v-investments'); if (iv) { iv.innerHTML = investmentsHtml(); iv.querySelectorAll('[data-retry]').forEach((b) => (b.onclick = loadHoldings)); }
+  }
+  V.investments = investmentsHtml;
 
   // ---------- Plaid: connect banks ----------
   let plaidState = { configured: false, environment: null, items: [], busy: '' };
@@ -213,7 +238,7 @@
   V.overview = overviewHtml;
   V.accounts = accountsHtml;
   const banner = document.querySelector('.banner');
-  if (banner) banner.innerHTML = 'Overview, Accounts, Banking and Cash Flow show <b>your real data</b>. Other screens are still <b>sample data</b> until connected.';
+  if (banner) banner.innerHTML = 'Overview, Accounts, Banking, Cash Flow and Investments show <b>your real data</b>. Other screens are still <b>sample data</b> until connected.';
   Object.keys(done).forEach((k) => delete done[k]);
   route();
   api('/me').then((m) => {

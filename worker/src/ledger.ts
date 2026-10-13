@@ -111,12 +111,23 @@ export async function route(request: Request, ctx: Ctx): Promise<unknown> {
       return { ok: true };
     }
   }
+  if (resource === 'holdings' && parts.length === 2) {
+    if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
+    const rows = await db(ctx, 'pf_holdings', {}, { select: 'id,account_id,ticker,name,sec_type,quantity,price,value,cost_basis,currency,as_of,updated_at', ...owned(ctx), order: 'value.desc', limit: '2000' });
+    let value = 0, cost = 0, costKnown = 0;
+    const types: Record<string, number> = {};
+    for (const h of rows) { const v = Number(h.value); value += v; const t = String(h.sec_type || 'other'); types[t] = (types[t] ?? 0) + v;
+      if (h.cost_basis != null) { cost += Number(h.cost_basis); costKnown += v; } }
+    const r = (n: number) => Math.round(n * 100) / 100;
+    return { holdings: rows, totals: { value: r(value), costBasis: costKnown ? r(cost) : null, gain: costKnown ? r(costKnown - cost) : null, positions: rows.length },
+      allocation: Object.entries(types).map(([type, v]) => ({ type, value: r(v) })).sort((a, b) => b.value - a.value) };
+  }
   if (resource === 'cashflow' && parts.length === 2) {
     if (m !== 'GET') throw new HttpError(405, 'method_not_allowed');
     return cashflow(ctx, url);
   }
-  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow'].includes(resource ?? '') ? 405 : 404,
-    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
+  throw new HttpError(parts.length >= 2 && ['accounts', 'summary', 'me', 'transactions', 'cashflow', 'holdings'].includes(resource ?? '') ? 405 : 404,
+    parts.length >= 2 && ['accounts', 'summary', 'transactions', 'cashflow', 'holdings'].includes(resource ?? '') ? 'method_not_allowed' : 'not_found');
 }
 
 export const TRANSFER = 'transfer';
