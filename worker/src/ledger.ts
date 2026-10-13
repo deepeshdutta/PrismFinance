@@ -17,7 +17,9 @@ export async function db(ctx: Ctx, path: string, init: RequestInit = {}, query: 
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new HttpError(503, 'service_unavailable');
-  return res.status === 204 ? [] : await res.json();
+  if (res.status === 204) return [];
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
 }
 async function body(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();
