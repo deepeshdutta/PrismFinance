@@ -142,6 +142,13 @@ export async function plaidRoute(request: Request, ctx: Ctx): Promise<unknown> {
     if (!b || typeof b.public_token !== 'string' || !/^public-[A-Za-z0-9-]{10,200}$/.test(b.public_token)) throw new HttpError(400, 'invalid_body');
     const institution = typeof b.institution_name === 'string' && b.institution_name.trim() ? b.institution_name.trim().slice(0, 120) : null;
     const ex = await call(ctx, '/item/public_token/exchange', { public_token: b.public_token });
+    if (institution) {
+      const dup = await db(ctx, 'pf_plaid_items', {}, { select: 'id', ...owned(ctx), institution_name: `eq.${institution}`, plaid_item_id: `neq.${String(ex.item_id)}`, limit: '1' });
+      if (dup.length) { // same bank linked again would duplicate every account; drop the new Plaid item
+        try { await call(ctx, '/item/remove', { access_token: String(ex.access_token) }); } catch { /* ignore */ }
+        throw new HttpError(409, 'already_linked');
+      }
+    }
     const row = { owner_id: ctx.ownerId, plaid_item_id: String(ex.item_id), access_token_enc: await encrypt(String(ex.access_token), ctx.plaid!.tokenKey), institution_name: institution };
     const [item] = await db(ctx, 'pf_plaid_items', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(row) }, { on_conflict: 'owner_id,plaid_item_id' });
     // Plaid may need a few seconds before transactions are ready; an early empty sync is fine, the next sync fills in.
@@ -153,6 +160,7 @@ export async function plaidRoute(request: Request, ctx: Ctx): Promise<unknown> {
     const [item] = await db(ctx, 'pf_plaid_items', {}, { select: 'id,access_token_enc', id: `eq.${id}`, ...owned(ctx), limit: '1' });
     if (!item) throw new HttpError(404, 'not_found');
     try { await call(ctx, '/item/remove', { access_token: await decrypt(item.access_token_enc, ctx.plaid!.tokenKey) }); } catch { /* still remove locally */ }
+    await db(ctx, 'pf_accounts', { method: 'DELETE' }, { plaid_item_id: `eq.${id}`, ...owned(ctx) }); // cascades to its transactions
     await db(ctx, 'pf_plaid_items', { method: 'DELETE' }, { id: `eq.${id}`, ...owned(ctx) });
     return { ok: true };
   }
