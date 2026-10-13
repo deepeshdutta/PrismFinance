@@ -208,6 +208,8 @@ return `<div class="bar" style="padding:6px"><div style="display:grid;grid-templ
 
 V.calls=()=>'<div class="card"><p class="sub">Loading…</p></div>';
 
+V.options=()=>'<div class="card"><p class="sub">Loading…</p></div>';
+
 V.imports=()=>`<div class="card"><h3>Upload a statement</h3><div class="hint">PDF, XLSX, CSV or JSON · nothing is saved until you confirm</div>
 <div class="steps"><span class="on">1 Upload</span><span>2 Map account</span><span>3 Map columns</span><span>4 Preview &amp; errors</span><span>5 Commit</span></div>
 <div class="drop"><b style="color:var(--text)">Drop a file here</b><br>or choose from your device<br><small>Re-importing the same statement adds zero duplicates.</small></div></div>
@@ -219,8 +221,8 @@ V.settings=()=>`<div class="grid g2"><div class="card"><h3>Approved members</h3>
 <div class="card"><h3>Preferences</h3><div class="hint">Display only</div><table><tr><td>Timezone</td><td class="r">America/New_York</td></tr><tr><td>Reporting currency</td><td class="r">USD</td></tr><tr><td>Session length</td><td class="r">12 hours</td></tr></table></div></div>`;
 
 // ---------- shell ----------
-const NAV=[['overview','Overview','M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],['accounts','Accounts','M3 10h18M5 10V20M10 10V20M14 10V20M19 10V20M2 20h20M12 3l9 5H3z'],['banking','Banking','M3 6h18v12H3zM3 10h18'],['cashflow','Cash Flow','M5 20V10M12 20V4M19 20v-7'],['investments','Investments','M3 17l6-6 4 4 8-9'],['calls','Covered Calls','M4 18l5-6 4 3 7-9M14 6h6v6'],['trading','Trading P&L','M4 4v16h16M8 14l3-4 3 3 4-6'],['imports','Imports','M12 3v12M7 10l5 5 5-5M4 20h16'],['settings','Settings','M12 8a4 4 0 100 8 4 4 0 000-8zM12 2v3M12 19v3M2 12h3M19 12h3']];
-const SUB={overview:'Everything at a glance · click any figure to trace it',accounts:'Grouped by institution · identifiers masked',banking:'Transactions across linked and imported accounts',cashflow:'Income, expenses and daily spending',investments:'Holdings and performance',calls:'Sell calls against shares you own',trading:'Schwab-style capital & profits (sample)',imports:'Manual fallback for unsupported sources',settings:'Members and preferences'};
+const NAV=[['overview','Overview','M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z'],['accounts','Accounts','M3 10h18M5 10V20M10 10V20M14 10V20M19 10V20M2 20h20M12 3l9 5H3z'],['banking','Banking','M3 6h18v12H3zM3 10h18'],['cashflow','Cash Flow','M5 20V10M12 20V4M19 20v-7'],['investments','Investments','M3 17l6-6 4 4 8-9'],['calls','Covered Calls','M4 18l5-6 4 3 7-9M14 6h6v6'],['trading','Trading P&L','M4 4v16h16M8 14l3-4 3 3 4-6'],['options','Options','M4 20L12 12l8 8'],['imports','Imports','M12 3v12M7 10l5 5 5-5M4 20h16'],['settings','Settings','M12 8a4 4 0 100 8 4 4 0 000-8zM12 2v3M12 19v3M2 12h3M19 12h3']];
+const SUB={overview:'Everything at a glance · click any figure to trace it',accounts:'Grouped by institution · identifiers masked',banking:'Transactions across linked and imported accounts',cashflow:'Income, expenses and daily spending',investments:'Holdings and performance',calls:'Sell calls against shares you own',trading:'Realized & unrealized, stocks vs options',options:'Open positions, profit flags and premium history',imports:'Manual fallback for unsupported sources',settings:'Members and preferences'};
 $('#nav').innerHTML=NAV.map(([k,l,d])=>`<a href="#${k}" data-k="${k}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>${l}</a>`).join('');
 $('#views').innerHTML=NAV.map(([k])=>`<section class="view" id="v-${k}"></section>`).join('');
 const done={};

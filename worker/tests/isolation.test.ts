@@ -39,6 +39,10 @@ function seed(): Record<string, Row[]> {
       { id: ITEM_A, owner_id: A, institution_name: 'A-Bank', status: 'ok', access_token_enc: 'enc-a' },
       { id: ITEM_B, owner_id: B, institution_name: 'B-Bank', status: 'ok', access_token_enc: 'enc-b' },
     ],
+    pf_investment_txns: [
+      { id: 'itx-a', owner_id: A, account_id: ACC_A, posted_on: '2026-09-01', txn_type: 'sell', name: 'A- ZZZ put sale', quantity: -200, amount: -240, fees: 1.3, option_underlying: 'ZZZ' },
+      { id: 'itx-b', owner_id: B, account_id: ACC_B, posted_on: '2026-09-01', txn_type: 'sell', name: 'B- secret option', quantity: -100, amount: -777, fees: 0, option_underlying: 'VVV' },
+    ],
   };
 }
 // Minimal PostgREST emulation: eq./neq./in./not.is. filters, select, order ignored, limit honoured.
@@ -94,7 +98,7 @@ function setup() {
 test('each member reads only their own data on every read route', async () => {
   const { call } = setup();
   for (const [who, own, other] of [['A', 'A-', 'B-'], ['B', 'B-', 'A-']] as const) {
-    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/plaid/items', '/api/ticker', '/api/options/calls']) {
+    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/plaid/items', '/api/ticker', '/api/options/calls', '/api/pnl', '/api/options/open', '/api/options/history', '/api/pnl/series']) {
       const r = await call(who, path);
       assert.equal(r.status, 200, `${who} ${path}`);
       assert.ok(!r.text.includes(other), `${who} saw the other member's data on ${path}`);
@@ -152,7 +156,7 @@ test('every database read for member data is scoped to the caller', async () => 
   const { call, log } = setup();
   for (const who of ['A', 'B'] as const) {
     log.length = 0;
-    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/health', '/api/plaid/items', '/api/ticker', '/api/options/calls']) await call(who, path);
+    for (const path of ['/api/accounts', '/api/transactions', '/api/holdings', '/api/summary', '/api/cashflow', '/api/health', '/api/plaid/items', '/api/ticker', '/api/options/calls', '/api/pnl', '/api/options/open', '/api/options/history', '/api/pnl/series']) await call(who, path);
     const want = `eq.${who === 'A' ? A : B}`;
     const data = log.filter((l) => l.table !== 'prism_members');
     assert.ok(data.length > 0);
@@ -188,7 +192,7 @@ test('cross-site writes are refused', async () => {
 
 test('static audit: every query on a member table in the Worker source carries an owner scope', async () => {
   const dir = new URL('../src/', import.meta.url);
-  const memberTables = /'(pf_accounts|pf_transactions|pf_holdings|pf_plaid_items)'/;
+  const memberTables = /'(pf_accounts|pf_transactions|pf_holdings|pf_plaid_items|pf_investment_txns)'/;
   for (const f of await readdir(dir)) {
     if (!f.endsWith('.ts')) continue;
     const lines = (await readFile(new URL(f, dir), 'utf8')).split('\n');
