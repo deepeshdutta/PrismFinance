@@ -13,6 +13,8 @@
   "vars": {
     "ACCESS_TEAM_DOMAIN": "https://frosty-night-150d.cloudflareaccess.com",
     "ACCESS_AUD": "71e4e20c6b3a9ed4b1ece9bf2e510bd0fb1a328b4abd5c5e8b81344141f8a48b",
-    "SUPABASE_URL": "https://gsvfzjuktwowliycqvpw.supabase.co"
+    "SUPABASE_URL": "https://gsvfzjuktwowliycqvpw.supabase.co",
+    "PLAID_CLIENT_ID": "6accf4e74fa127000d24be55",
+    "PLAID_ENV": "sandbox"
   }
 }
