@@ -108,10 +108,10 @@ async function syncItem(ctx: Ctx, item: any) {
 }
 async function syncAll(ctx: Ctx, only?: string) {
   const items = await db(ctx, 'pf_plaid_items', {}, { select: 'id,plaid_item_id,access_token_enc,institution_name,sync_cursor', ...owned(ctx), ...(only ? { id: `eq.${only}` } : {}) });
-  const total = { added: 0, modified: 0, removed: 0, failed: 0 };
+  const total: { added: number; modified: number; removed: number; failed: number; reasons: string[] } = { added: 0, modified: 0, removed: 0, failed: 0, reasons: [] };
   for (const item of items) {
     try { const r = await syncItem(ctx, item); total.added += r.added; total.modified += r.modified; total.removed += r.removed; }
-    catch { total.failed++; await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ status: 'error' }) }, { id: `eq.${item.id}`, ...owned(ctx) }).catch(() => {}); }
+    catch (e) { total.failed++; total.reasons.push(e instanceof HttpError ? `${e.status}:${e.message}` : `err:${(e as Error)?.name ?? 'unknown'}`); await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ status: 'error' }) }, { id: `eq.${item.id}`, ...owned(ctx) }).catch(() => {}); }
   }
   return total;
 }
