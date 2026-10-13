@@ -57,3 +57,41 @@ test('provider failure surfaces as an error rather than stale or invented prices
   resetQuoteCache();
   await assert.rejects(publicQuotes(KEYS, (async () => new Response('no', { status: 500 })) as any));
 });
+
+function tradierFetcher(mode: 'many' | 'one' | 'fail') {
+  const calls: { url: string; auth: string | null; body: string }[] = [];
+  const f = (async (u: any, init: any) => {
+    const url = String(u); const body = String(init?.body ?? '');
+    calls.push({ url, auth: init?.headers?.Authorization ?? null, body });
+    if (!url.includes('tradier.com')) return new Response('[]', { status: 200 });
+    if (mode === 'fail') return new Response('nope', { status: 401 });
+    const syms = new URLSearchParams(body).get('symbols')!.split(',');
+    const quote = syms.map((s, i) => ({ symbol: s, last: 110 + (i % 5), prevclose: i === 3 ? 0 : 100, trade_date: 1760292000000 }));
+    return new Response(JSON.stringify({ quotes: { quote: mode === 'one' ? quote[0] : quote } }), { status: 200 });
+  }) as any;
+  return { f, calls };
+}
+test('tradier: batches of <=100, bearer token, POST, change from prevclose, bad rows skipped', async () => {
+  resetQuoteCache(); const { f, calls } = tradierFetcher('many');
+  const out: any = await publicQuotes({ keyId: '', secret: '', tradierToken: 'tok' }, f);
+  assert.equal(out.demo, false);
+  assert.ok(calls.length >= 5);
+  for (const c of calls) { assert.equal(c.auth, 'Bearer tok'); assert.ok(c.body.includes('symbols=')); assert.ok(new URLSearchParams(c.body).get('symbols')!.split(',').length <= 100); assert.ok(c.url.startsWith('https://api.tradier.com/v1/markets/quotes')); }
+  const q = out.quotes.find((x: any) => x.s === 'AAPL') ?? out.quotes[0];
+  assert.ok(q.pct > 0 && q.p > 100);
+  assert.ok(out.quotes.every((x: any) => x.p > 0));
+});
+test('tradier: a single-quote response (object, not array) still parses', async () => {
+  resetQuoteCache(); const { f } = tradierFetcher('one');
+  const out: any = await publicQuotes({ keyId: '', secret: '', tradierToken: 'tok' }, f);
+  assert.equal(out.demo, false); assert.ok(out.index.length + out.quotes.length >= 1);
+});
+test('tradier: provider rejection surfaces as an error, never as fake prices', async () => {
+  resetQuoteCache(); const { f } = tradierFetcher('fail');
+  await assert.rejects(() => publicQuotes({ keyId: '', secret: '', tradierToken: 'bad' }, f), /market_data_error/);
+});
+test('tradier: sandbox env uses the sandbox host', async () => {
+  resetQuoteCache(); const { f, calls } = tradierFetcher('many');
+  await publicQuotes({ keyId: '', secret: '', tradierToken: 'tok', tradierEnv: 'sandbox' }, f);
+  assert.ok(calls[0].url.startsWith('https://sandbox.tradier.com/'));
+});

@@ -3,7 +3,7 @@
 import { NASDAQ_100, NASDAQ_TOP500 } from './symbols';
 import { db, type Ctx } from './ledger';
 
-export interface MarketConfig { keyId: string; secret: string; }
+export interface MarketConfig { keyId: string; secret: string; tradierToken?: string; tradierEnv?: string; }
 export interface Quote { s: string; p: number; c: number; pct: number; t: string | null; }
 const BENCH = ['SPY', 'QQQ', 'DIA', 'IWM'];
 const UNIVERSE = [...new Set([...BENCH, ...NASDAQ_TOP500])];
@@ -26,6 +26,34 @@ export function demoQuote(sym: string, now = Date.now()): Quote {
   return { s: sym, p, c: r2(p - prev), pct, t: new Date(now).toISOString() };
 }
 
+async function tradier(cfg: MarketConfig, symbols: string[], send: typeof fetch): Promise<Map<string, Quote>> {
+  const out = new Map<string, Quote>();
+  const base = cfg.tradierEnv === 'sandbox' ? 'https://sandbox.tradier.com' : 'https://api.tradier.com';
+  for (let i = 0; i < symbols.length; i += 100) {
+    const part = symbols.slice(i, i + 100);
+    const res = await send(`${base}/v1/markets/quotes`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.tradierToken}`, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ symbols: part.join(','), greeks: 'false' }).toString(),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error('market_data_error');
+    const data = await res.json() as any;
+    const raw = data?.quotes?.quote;
+    const list: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    for (const v of list) {
+      const sym = String(v?.symbol ?? '');
+      const p = Number(v?.last ?? v?.close);
+      const prev = Number(v?.prevclose);
+      if (!sym || !Number.isFinite(p) || p <= 0 || !Number.isFinite(prev) || prev <= 0) continue;
+      const ts = Number(v?.trade_date);
+      out.set(sym, { s: sym, p: r2(p), c: r2(p - prev), pct: r2(((p - prev) / prev) * 100), t: Number.isFinite(ts) && ts > 0 ? new Date(ts).toISOString() : null });
+    }
+  }
+  return out;
+}
+const live = (cfg: MarketConfig, symbols: string[], send: typeof fetch) => cfg.tradierToken ? tradier(cfg, symbols, send) : alpaca(cfg, symbols, send);
+
 async function alpaca(cfg: MarketConfig, symbols: string[], send: typeof fetch): Promise<Map<string, Quote>> {
   const out = new Map<string, Quote>();
   for (let i = 0; i < symbols.length; i += 200) {
@@ -47,15 +75,15 @@ async function alpaca(cfg: MarketConfig, symbols: string[], send: typeof fetch):
 
 export async function getUniverse(cfg: MarketConfig | undefined, send: typeof fetch, now = Date.now()) {
   if (cache && now - cache.at < TTL_MS) return cache;
-  const demo = !cfg || !cfg.keyId || !cfg.secret;
-  const quotes = demo ? new Map(UNIVERSE.map((s) => [s, demoQuote(s, now)])) : await alpaca(cfg!, UNIVERSE, send);
+  const demo = !cfg || !(cfg.tradierToken || (cfg.keyId && cfg.secret));
+  const quotes = demo ? new Map(UNIVERSE.map((s) => [s, demoQuote(s, now)])) : await live(cfg!, UNIVERSE, send);
   cache = { at: now, quotes, demo };
   return cache;
 }
 async function extra(cfg: MarketConfig | undefined, send: typeof fetch, symbols: string[], demo: boolean, have: Map<string, Quote>) {
   const need = symbols.filter((s) => !have.has(s));
   if (!need.length) return new Map<string, Quote>();
-  return demo ? new Map(need.map((s) => [s, demoQuote(s)])) : alpaca(cfg!, need, send).catch(() => new Map<string, Quote>());
+  return demo ? new Map(need.map((s) => [s, demoQuote(s)])) : live(cfg!, need, send).catch(() => new Map<string, Quote>());
 }
 const by = (m: Map<string, Quote>, list: string[]) => list.map((s) => m.get(s)).filter((q): q is Quote => !!q);
 function movers(m: Map<string, Quote>) {
