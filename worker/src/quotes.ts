@@ -85,6 +85,14 @@ async function extra(cfg: MarketConfig | undefined, send: typeof fetch, symbols:
   if (!need.length) return new Map<string, Quote>();
   return demo ? new Map(need.map((s) => [s, demoQuote(s)])) : live(cfg!, need, send).catch(() => new Map<string, Quote>());
 }
+// One symbol's quote, for the options screen (member context, same cache/provider as the bar).
+export async function quoteFor(cfg: MarketConfig | undefined, send: typeof fetch, sym: string, now = Date.now()): Promise<{ quote: Quote | null; demo: boolean }> {
+  const u = await getUniverse(cfg, send, now);
+  const hit = u.quotes.get(sym);
+  if (hit) return { quote: hit, demo: u.demo };
+  const m = await extra(cfg, send, [sym], u.demo, u.quotes);
+  return { quote: m.get(sym) ?? null, demo: u.demo };
+}
 const by = (m: Map<string, Quote>, list: string[]) => list.map((s) => m.get(s)).filter((q): q is Quote => !!q);
 function movers(m: Map<string, Quote>) {
   const all = by(m, NASDAQ_TOP500).filter((q) => q.p >= 2);
