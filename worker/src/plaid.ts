@@ -103,14 +103,46 @@ async function syncItem(ctx: Ctx, item: any) {
     if (!data.has_more) break;
     if (page === 29) { cursor = first; throw new HttpError(502, 'plaid_error'); }
   }
+  const holdings = await syncHoldings(ctx, item, accessToken);
   await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ sync_cursor: cursor, status: 'ok', last_synced_at: new Date().toISOString() }) }, { id: `eq.${item.id}`, ...owned(ctx) });
-  return { added, modified, removed };
+  return { added, modified, removed, holdings };
+}
+
+// ---- investment holdings (best effort: banks without investment accounts simply return nothing) ----
+async function syncHoldings(ctx: Ctx, item: any, accessToken: string) {
+  let data: any;
+  try { data = await call(ctx, '/investments/holdings/get', { access_token: accessToken }); } catch { return 0; }
+  const started = new Date().toISOString();
+  const accts = (data.accounts ?? []).map((a: any) => ({ owner_id: ctx.ownerId, plaid_item_id: item.id, plaid_account_id: String(a.account_id),
+    name: String(a.name ?? 'Account').slice(0, 80) || 'Account', kind: mapKind(String(a.type), a.subtype ?? null), institution: item.institution_name ?? null,
+    currency: /^[A-Z]{3}$/.test(a.balances?.iso_currency_code ?? '') ? a.balances.iso_currency_code : 'USD',
+    balance: round2(Number(a.balances?.current) || 0), updated_at: started }));
+  if (!accts.length) return 0;
+  const rows = await db(ctx, 'pf_accounts', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(accts) }, { on_conflict: 'owner_id,plaid_account_id' });
+  const ids = new Map<string, string>(rows.map((r: any) => [r.plaid_account_id, r.id]));
+  const secs = new Map<string, any>((data.securities ?? []).map((x: any) => [String(x.security_id), x]));
+  const holdings = (data.holdings ?? []).map((h: any) => {
+    const acct = ids.get(String(h.account_id)); const sec = secs.get(String(h.security_id)) ?? {};
+    if (!acct) return null;
+    const qty = Number(h.quantity) || 0, price = Number(h.institution_price) || 0;
+    return { owner_id: ctx.ownerId, account_id: acct, security_id: String(h.security_id),
+      ticker: sec.ticker_symbol ? String(sec.ticker_symbol).slice(0, 30) : null,
+      name: String(sec.name ?? sec.ticker_symbol ?? 'Security').slice(0, 200), sec_type: sec.type ? String(sec.type).slice(0, 40) : null,
+      quantity: qty, price, value: round2(Number(h.institution_value) || qty * price),
+      cost_basis: h.cost_basis == null ? null : round2(Number(h.cost_basis)),
+      currency: /^[A-Z]{3}$/.test(h.iso_currency_code ?? '') ? h.iso_currency_code : 'USD',
+      as_of: /^\d{4}-\d{2}-\d{2}$/.test(h.institution_price_as_of ?? '') ? h.institution_price_as_of : null, updated_at: started };
+  }).filter((x: any) => !!x);
+  for (const part of chunk(holdings)) await db(ctx, 'pf_holdings', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(part) }, { on_conflict: 'owner_id,account_id,security_id' });
+  // positions that were sold no longer appear in the feed: drop stale rows for these accounts
+  for (const id of ids.values()) await db(ctx, 'pf_holdings', { method: 'DELETE' }, { ...owned(ctx), account_id: `eq.${id}`, updated_at: `lt.${started}` });
+  return holdings.length;
 }
 async function syncAll(ctx: Ctx, only?: string) {
   const items = await db(ctx, 'pf_plaid_items', {}, { select: 'id,plaid_item_id,access_token_enc,institution_name,sync_cursor', ...owned(ctx), ...(only ? { id: `eq.${only}` } : {}) });
-  const total: { added: number; modified: number; removed: number; failed: number; reasons: string[] } = { added: 0, modified: 0, removed: 0, failed: 0, reasons: [] };
+  const total: { added: number; modified: number; removed: number; holdings: number; failed: number; reasons: string[] } = { added: 0, modified: 0, removed: 0, holdings: 0, failed: 0, reasons: [] };
   for (const item of items) {
-    try { const r = await syncItem(ctx, item); total.added += r.added; total.modified += r.modified; total.removed += r.removed; }
+    try { const r = await syncItem(ctx, item); total.added += r.added; total.modified += r.modified; total.removed += r.removed; total.holdings += r.holdings; }
     catch (e) { total.failed++; total.reasons.push(e instanceof HttpError ? `${e.status}:${e.message}` : `err:${(e as Error)?.name ?? 'unknown'}`); await db(ctx, 'pf_plaid_items', { method: 'PATCH', body: JSON.stringify({ status: 'error' }) }, { id: `eq.${item.id}`, ...owned(ctx) }).catch(() => {}); }
   }
   return total;
@@ -132,7 +164,7 @@ export async function plaidRoute(request: Request, ctx: Ctx): Promise<unknown> {
   }
   if (action === 'link-token' && m === 'POST') {
     const data = await call(ctx, '/link/token/create', { client_name: 'PrismFinance', language: 'en', country_codes: ['US'],
-      user: { client_user_id: ctx.ownerId }, products: ['transactions'], transactions: { days_requested: 730 } });
+      user: { client_user_id: ctx.ownerId }, products: ['transactions'], optional_products: ['investments'], transactions: { days_requested: 730 } });
     return { link_token: data.link_token };
   }
   if (action === 'exchange' && m === 'POST') {

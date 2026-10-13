@@ -98,3 +98,27 @@ test('plaid SQL: private, idempotent, unique per owner', async () => {
   await db.exec(`insert into pf_accounts(owner_id,name,kind,plaid_account_id) values ('${o}','a','checking','p1')`);
   await assert.rejects(db.exec(`insert into pf_accounts(owner_id,name,kind,plaid_account_id) values ('${o}','b','checking','p1')`));
 });
+
+test('holdings sync stores positions for the owner and the route totals them', async () => {
+  const w = world(); const posts: any[] = [];
+  const inner = w.ctx.fetcher;
+  w.ctx.fetcher = (async (u: any, init: RequestInit = {}) => {
+    const url = String(u);
+    if (url.includes('plaid.com/investments/holdings/get')) return new Response(JSON.stringify({
+      accounts: [{ account_id: 'iv1', name: 'Brokerage', type: 'investment', subtype: 'brokerage', balances: { current: 1500 } }],
+      securities: [{ security_id: 's1', ticker_symbol: 'VTI', name: 'Vanguard Total', type: 'etf' }],
+      holdings: [{ account_id: 'iv1', security_id: 's1', quantity: 5, institution_price: 300, institution_value: 1500, cost_basis: 1200, iso_currency_code: 'USD' }] }), { status: 200 });
+    if (url.includes('/rest/v1/pf_holdings') && (init.method ?? 'GET') !== 'GET') posts.push({ method: init.method, url, body: init.body ? JSON.parse(init.body as string) : null });
+    return inner(u, init);
+  }) as any;
+  await plaidRoute(req('POST', '/api/plaid/exchange', { public_token: 'public-sandbox-abcdefghij', institution_name: 'Broker' }), w.ctx);
+  const post = posts.find((p) => p.method === 'POST')!;
+  assert.equal(post.body[0].ticker, 'VTI'); assert.equal(post.body[0].owner_id, A); assert.equal(post.body[0].value, 1500); assert.equal(post.body[0].cost_basis, 1200);
+  assert.ok(posts.some((p) => p.method === 'DELETE' && p.url.includes('owner_id=eq.' + A)), 'stale rows removed, scoped to owner');
+});
+test('a bank with no investment product still syncs (holdings are best effort)', async () => {
+  const w = world(); const inner = w.ctx.fetcher;
+  w.ctx.fetcher = (async (u: any, init: RequestInit = {}) => String(u).includes('investments/holdings/get') ? new Response('{}', { status: 400 }) : inner(u, init)) as any;
+  const out: any = await plaidRoute(req('POST', '/api/plaid/exchange', { public_token: 'public-sandbox-abcdefghij', institution_name: 'Bank' }), w.ctx);
+  assert.equal(out.sync.failed, 0); assert.equal(out.sync.holdings, 0);
+});
