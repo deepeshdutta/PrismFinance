@@ -184,6 +184,40 @@
   }
   V.investments = investmentsHtml;
 
+  // ---------- Covered calls ----------
+  let cc = null, ccErr = null, ccSym = '', ccExp = '', ccBusy = false;
+  const money = (n) => '$' + Number(n).toFixed(2);
+  function ccHtml() {
+    if (ccErr) return `<div class="card"><h3>Couldn't load option chains</h3><p class="sub">${esc(ccErr)}</p><button class="btn" data-ccretry>Try again</button></div>`;
+    if (!cc) return '<div class="card"><p class="sub">Loading…</p></div>';
+    if (!cc.eligible.length) return `<div class="card"><h3>No lots of 100 shares yet</h3><p class="sub">A covered call needs at least 100 shares of one stock. Link a brokerage on the Accounts page and eligible positions appear here. Only you can see them.</p><a class="btn" href="#accounts">Go to Accounts</a></div>`;
+    const demo = cc.demo ? '<div class="banner" style="margin:0 0 14px"><b>DEMO DATA</b> - these option prices are simulated, not real quotes. Do not trade on them.</div>' : '';
+    const pick = cc.eligible.map((e) => `<button class="chip sm ${e.ticker === cc.symbol ? 'on' : ''}" data-ccsym="${esc(e.ticker)}">${esc(e.ticker)} · ${e.contracts}x</button>`).join(' ');
+    const exps = cc.expirations.map((x) => `<button class="chip sm ${x === cc.expiry ? 'on' : ''}" data-ccexp="${esc(x)}">${esc(x.slice(5))}</button>`).join(' ');
+    const k = (l, v, d) => `<div class="card kpi"><div class="l">${l}</div><div class="v num">${v}</div><div class="d">${d}</div></div>`;
+    const rows = cc.calls.map((c) => `<tr class="${c.otmPct < 0 ? 'mut' : ''}"><td class="num"><b>${money(c.strike)}</b></td><td class="r num ${c.otmPct < 0 ? 'down' : ''}">${c.otmPct >= 0 ? '+' : ''}${c.otmPct.toFixed(1)}%</td><td class="r num">${money(c.bid)}</td><td class="r num">${money(c.ask)}</td><td class="r num">${c.delta == null ? '—' : c.delta.toFixed(2)}</td><td class="r num">${c.iv == null ? '—' : c.iv.toFixed(0) + '%'}</td><td class="r num"><b>${money(c.bid * 100 * Math.max(1, cc.contracts))}</b></td><td class="r num">${c.staticPct.toFixed(2)}%</td><td class="r num up">${c.annPct.toFixed(1)}%</td><td class="r num">${c.calledPct >= 0 ? '+' : ''}${c.calledPct.toFixed(2)}%</td><td class="r num">${c.oi == null ? '—' : c.oi.toLocaleString()}</td></tr>`).join('');
+    return demo + `<div class="grid g4">${k(esc(cc.symbol) + ' price', money(cc.spot), (cc.dayPct >= 0 ? '+' : '') + cc.dayPct.toFixed(2) + '% today')}${k('You own', cc.shares.toLocaleString() + ' sh', cc.contracts + ' contract' + (cc.contracts === 1 ? '' : 's') + ' coverable')}${k('Expiry', esc(cc.expiry), cc.dte + ' days')}${k('Premium basis', 'Bid', 'What you could actually collect')}</div>
+      <div class="card" style="margin-top:14px"><h3>Stock</h3><div>${pick}</div><h3 style="margin-top:12px">Expiry</h3><div>${exps}</div></div>
+      <div class="card" style="margin-top:14px"><h3>Calls to sell · ${esc(cc.symbol)} · ${esc(cc.expiry)}</h3><div class="hint">Premium total is for ${Math.max(1, cc.contracts)} contract${cc.contracts > 1 ? 's' : ''} (100 shares each). "If called" = return if shares are sold at the strike, premium included. Greyed rows are in the money - your shares would likely be called away.</div>
+      <div style="overflow-x:auto"><table><tr><th>Strike</th><th class="r">From price</th><th class="r">Bid</th><th class="r">Ask</th><th class="r">Delta</th><th class="r">IV</th><th class="r">Premium</th><th class="r">Yield</th><th class="r">Annualised</th><th class="r">If called</th><th class="r">Open int.</th></tr>${rows || '<tr><td colspan="11">No quoted calls for this expiry.</td></tr>'}</table></div>
+      <p class="sub" style="margin-top:8px">${esc(cc.note || '')} Selling calls caps your upside at the strike and does not protect against a fall. This is information, not advice.</p></div>`;
+  }
+  async function loadCalls() {
+    if (ccBusy) return; ccBusy = true;
+    try { const q = new URLSearchParams(); if (ccSym) q.set('symbol', ccSym); if (ccExp) q.set('expiry', ccExp); cc = await api('/options/calls?' + q); ccSym = cc.symbol || ccSym; ccExp = cc.expiry || ''; ccErr = null; } catch (e) { ccErr = e.message; }
+    ccBusy = false; paintCalls();
+  }
+  function paintCalls() {
+    const el = document.getElementById('v-calls'); if (!el) return;
+    el.innerHTML = ccHtml();
+    el.querySelectorAll('[data-ccsym]').forEach((b) => (b.onclick = () => { ccSym = b.dataset.ccsym; ccExp = ''; loadCalls(); }));
+    el.querySelectorAll('[data-ccexp]').forEach((b) => (b.onclick = () => { ccExp = b.dataset.ccexp; loadCalls(); }));
+    el.querySelectorAll('[data-ccretry]').forEach((b) => (b.onclick = loadCalls));
+  }
+  V.calls = ccHtml;
+  window.addEventListener('hashchange', () => { if (location.hash === '#calls') loadCalls(); });
+  if (location.hash === '#calls') setTimeout(loadCalls, 0);
+
   // ---------- Plaid: connect banks ----------
   let plaidState = { configured: false, environment: null, items: [], busy: '' };
   function loadPlaidScript() {
