@@ -14,6 +14,8 @@ export interface Env {
   PLAID_TOKEN_KEY?: string;
   ALPACA_KEY_ID?: string;
   ALPACA_SECRET?: string;
+  TRADIER_TOKEN?: string;
+  TRADIER_ENV?: string;
 }
 interface Member {
   owner_id: string;
@@ -104,7 +106,7 @@ export function createHandler(dependencies: Dependencies = {}) {
       if (request.method !== 'GET' && request.headers.get('Sec-Fetch-Site') === 'cross-site') throw new AccessError(403, 'access_denied');
       const ctx = { database, key: env.SUPABASE_SECRET_KEY, ownerId: member.owner_id, role: member.role, fetcher: dependencies.fetch ?? fetch,
         plaid: { clientId: env.PLAID_CLIENT_ID ?? '', secret: env.PLAID_SECRET ?? '', env: env.PLAID_ENV || 'sandbox', tokenKey: env.PLAID_TOKEN_KEY ?? '' },
-        market: { keyId: env.ALPACA_KEY_ID ?? '', secret: env.ALPACA_SECRET ?? '' } };
+        market: { keyId: env.ALPACA_KEY_ID ?? '', secret: env.ALPACA_SECRET ?? '', tradierToken: env.TRADIER_TOKEN ?? '', tradierEnv: env.TRADIER_ENV || 'production' } };
       if (path === '/api/ticker') { if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405); return json(await memberQuotes(ctx, ctx.market)); }
       const result = path === '/api/plaid' || path.startsWith('/api/plaid/') ? await plaidRoute(request, ctx) : await route(request, ctx);
       return json(result);
