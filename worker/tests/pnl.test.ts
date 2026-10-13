@@ -65,7 +65,7 @@ test('group: sold put opened then closed -> closed, R4 sign math', () => {
   assert.equal(g.outcome, 'closed');
   assert.equal(g.premiumCollected, 592);   // -(amount of sells)
   assert.equal(g.premiumPaid, 296);        // amount of buys
-  assert.equal(g.pnl, 293.4);              // 592 - 296 - 2.6
+  assert.equal(g.pnl, 296); // gross of commissions (user decision 2026-10-14): 592 - 296
   assert.equal(g.win, true);
   assert.equal(g.kind, 'sold_put');
   assert.equal(g.coverage, null);          // puts: no coverage label
@@ -200,8 +200,8 @@ test('pnlSummary: realized split, dividends, fees, unrealized, owner-scoped', as
   const s: any = await pnlSummary(c, new URL('http://x/api/pnl?from=2026-01-01&to=2026-10-13'), NOW);
   assert.deepEqual(s.accounts, [{ id: ACC, name: 'Brokerage' }]);
   assert.equal(s.realized.stocks, 800);            // 40 sh: (170-150)*40
-  assert.equal(s.realized.options, 293.4);         // ZZZ closed put
-  assert.equal(s.realized.total, 1093.4);
+  assert.equal(s.realized.options, 296); // gross of commissions
+  assert.equal(s.realized.total, 1096); // gross of commissions (was 1093.4 net of 2.6 fees)
   assert.equal(s.dividends, 50);
   assert.equal(s.fees, 3.25);                      // 1.3+1.3+0.65
   assert.equal(s.unrealized.stocks, 1200);
@@ -210,7 +210,7 @@ test('pnlSummary: realized split, dividends, fees, unrealized, owner-scoped', as
   assert.equal(s.unrealized.priceSource, 'delayed');
   assert.equal(s.dataStatus, 'live');
   const sep = s.realized.byMonth.find((m: any) => m.month === '2026-09');
-  assert.equal(sep.options, 293.4);
+  assert.equal(sep.options, 296); // gross of commissions
   assert.ok(seen.some((q) => q.includes(`owner_id=eq.${A}`) && q.includes('pf_investment_txns')));
 });
 test('pnlSummary: empty database -> dataStatus empty', async () => {
@@ -251,11 +251,11 @@ test('optionsHistory: groups, kind summary, cumulative premium', async () => {
   assert.equal(h.groups.length, 2);
   const zzz = h.groups.find((g: any) => g.underlying === 'ZZZ');
   assert.equal(zzz.outcome, 'closed');
-  assert.equal(zzz.pnl, 293.4);
+  assert.equal(zzz.pnl, 296); // gross of commissions
   assert.equal(zzz.win, true);
   assert.equal(zzz.kind, 'sold_put');
   assert.equal(h.summary.soldPuts.groups, 1);      // only completed ZZZ; QQX still open
-  assert.equal(h.summary.soldPuts.pnl, 293.4);
+  assert.equal(h.summary.soldPuts.pnl, 296); // gross of commissions
   assert.equal(h.summary.soldPuts.winRate, 1);
   assert.equal(h.summary.soldPuts.premium, 592);
   assert.deepEqual(h.cumulativePremium, [
@@ -273,7 +273,11 @@ test('pnlSeries: cumulative realized + dividends, unrealized null gaps per AC-10
   assert.equal(last.unrealized, null); // AC-10: no contemporaneous marks → explicit gap, never backfilled
   assert.ok(s.gaps || s.note.includes('gap') || s.note.includes('unavailable'), 'series must disclose the gap');
   assert.equal(last.dividendsCumulative, 0); // dividend was 2026-04-01, outside range
-  await assert.rejects(() => pnlSeries(c, new URL('http://x/api/pnl/series?from=2020-01-01&to=2026-10-13'), NOW), /range_too_large/);
+  // BUG-3: ranges >366 days are now allowed (BRS INV-02 2Y/3Y/All); realized
+  // computes over the full range, unrealized keeps null gaps.
+  const long: any = await pnlSeries(c, new URL('http://x/api/pnl/series?from=2020-01-01&to=2026-10-13'), NOW);
+  assert.ok(long.points.length > 366);
+  assert.ok(long.points.every((p: any) => p.unrealized === null));
 });
 test('isolation: member B sees none of A\'s investment data', async () => {
   const tables = seedTables();
@@ -307,7 +311,7 @@ test('group: open on QQX + expire marker on QQX1 → single group (normalizeUnde
   assert.equal(groups.length, 1, 'different security_ids must not split the group');
   assert.equal(groups[0].underlying, 'QQX');
   assert.equal(groups[0].outcome, 'expired');
-  assert.equal(groups[0].pnl, 398.7); // 400 - 1.3 fees
+  assert.equal(groups[0].pnl, 400); // gross of commissions (was 398.7 net of 1.3 fees)
 });
 
 test('group: covered-call coverage thresholds via getShares', () => {
