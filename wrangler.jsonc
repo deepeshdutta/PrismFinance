@@ -16,5 +16,24 @@
     "SUPABASE_URL": "https://gsvfzjuktwowliycqvpw.supabase.co",
     "PLAID_CLIENT_ID": "6accf4e74fa127000d24be55",
     "PLAID_ENV": "sandbox"
+  },
+  // Stage: separate Worker, separate Supabase project, Plaid Sandbox, Tradier sandbox. Shares nothing with production.
+  // Fill SUPABASE_URL and ACCESS_AUD after creating the Stage project and Access app (see STAGE.md). Until then it refuses all requests (503).
+  "env": {
+    "stage": {
+      "name": "prismfinance-stage",
+      "main": "worker/src/site.ts",
+      "workers_dev": true,
+      "preview_urls": false,
+      "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application" },
+      "vars": {
+        "ACCESS_TEAM_DOMAIN": "https://frosty-night-150d.cloudflareaccess.com",
+        "ACCESS_AUD": "",
+        "SUPABASE_URL": "",
+        "PLAID_CLIENT_ID": "6accf4e74fa127000d24be55",
+        "PLAID_ENV": "sandbox",
+        "TRADIER_ENV": "sandbox"
+      }
+    }
   }
 }
